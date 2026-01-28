@@ -291,7 +291,6 @@ function App() {
         onChangeMode={(nextMode) => {
           if (nextMode === "reset") {
             mapHandleRef.current?.setTransformMode(nextMode);
-            setMode("translate");
             return;
           }
           setMode(nextMode);
