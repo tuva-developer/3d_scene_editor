@@ -4,11 +4,11 @@ export class MaplibreShadowMesh extends THREE.Mesh {
   private meshMatrix: THREE.Matrix4 = new THREE.Matrix4();
   private shadowMatrix: THREE.Matrix4 = new THREE.Matrix4();
 
-  constructor(mesh: THREE.Mesh) {
+  constructor(mesh: THREE.Mesh, color: number = 0x000000, opacity: number = 0.2) {
     const shadowMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
+      color,
       transparent: true,
-      opacity: 0.2,
+      opacity,
       depthWrite: false,
       stencilWrite: true,
       stencilFunc: THREE.EqualStencilFunc,
@@ -24,8 +24,8 @@ export class MaplibreShadowMesh extends THREE.Mesh {
     const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -planeZ);
     const lightDir = sunDir.clone().normalize();
     const lightPos4D = new THREE.Vector4(-lightDir.x, -lightDir.y, -lightDir.z, 0);
-    const dot = plane.normal.dot(new THREE.Vector3(lightPos4D.x, lightPos4D.y, lightPos4D.z)) -
-      plane.constant * lightPos4D.w;
+    const dot =
+      plane.normal.dot(new THREE.Vector3(lightPos4D.x, lightPos4D.y, lightPos4D.z)) - plane.constant * lightPos4D.w;
     const m = this.shadowMatrix.elements;
 
     m[0] = dot - lightPos4D.x * plane.normal.x;

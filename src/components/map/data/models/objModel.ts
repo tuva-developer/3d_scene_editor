@@ -2,15 +2,11 @@ import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { tileLocalToLatLon } from "@/components/map/data/convert/coords";
+import type { ModelData } from "@/components/map/data/types";
 
 export function createYupToZUpMatrix(): THREE.Matrix4 {
   const matrix = new THREE.Matrix4();
-  matrix.set(
-    1, 0, 0, 0,
-    0, 0, -1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1
-  );
+  matrix.set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
   return matrix;
 }
 
@@ -90,10 +86,13 @@ export function reverseFaceWinding(geometry: THREE.BufferGeometry): void {
 
 export function prepareModelForRender(model: THREE.Object3D, setDefaultMat: boolean = true): void {
   model.matrixAutoUpdate = false;
-  const defaultMat = new THREE.MeshToonMaterial({ color: 0xc0c0c0, side: THREE.DoubleSide });
+  const defaultMat = new THREE.MeshLambertMaterial({ color: 0xc0c0c0, side: THREE.DoubleSide });
+  defaultMat.polygonOffset = true;
+  defaultMat.polygonOffsetFactor = -1;
+  defaultMat.polygonOffsetUnits = -1;
+  model.rotation.x = -Math.PI / 2;
   model.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      convertRawMeshYupToZup(child);
       reverseFaceWinding(child.geometry);
       if (setDefaultMat) {
         child.material = defaultMat;
@@ -107,12 +106,18 @@ export function prepareModelForRender(model: THREE.Object3D, setDefaultMat: bool
       }
     }
   });
+  model.updateMatrix();
+  model.updateMatrixWorld(true);
 }
 
-export async function loadModelFromGlb(url: string): Promise<THREE.Object3D> {
+export async function loadModelFromGlb(url: string): Promise<ModelData> {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
-  return gltf.scene as THREE.Object3D;
+  const obj = gltf.scene as THREE.Object3D;
+  return {
+    object3d: obj,
+    animations: gltf.animations,
+  };
 }
 
 export function obj3dReceiveShadow(model: THREE.Object3D): void {
@@ -156,18 +161,23 @@ export function decomposeObject(model: THREE.Object3D): {
   };
 }
 
-export function createLightGroup(scene: THREE.Scene): void {
+export function createLightGroup(scene: THREE.Scene, dir?: THREE.Vector3): void {
   const lightGroup = new THREE.Group();
   lightGroup.name = "light_group";
-  const dirLight = new THREE.DirectionalLight(0xffffff, 3);
-  dirLight.color.setHSL(0.1, 1, 0.95);
-  dirLight.target.position.set(4096, 4096, 0);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 5);
+  dirLight.color.setHSL(0.12, 0.7, 0.98);
+  const dirVector = dir ?? new THREE.Vector3(0.5, 0.5, 0.5);
+  dirLight.target.position.copy(dirVector.clone().multiplyScalar(5000));
   lightGroup.add(dirLight);
-  const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
-  hemiLight.color.setHSL(0.6, 1, 0.6);
-  hemiLight.groundColor.setHSL(0.095, 1, 0.75);
+  lightGroup.add(dirLight.target);
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 2.5);
+  hemiLight.color.setHSL(0.55, 0.4, 0.95);
+  hemiLight.groundColor.setHSL(0.08, 0.25, 0.6);
   hemiLight.position.set(0, 0, -1);
   lightGroup.add(hemiLight);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+  ambientLight.color.setHSL(0.15, 0.2, 1);
+  lightGroup.add(ambientLight);
   scene.add(lightGroup);
 }
 
@@ -204,4 +214,30 @@ export function objectEnableClippingPlaneZ(object: THREE.Object3D, enable: boole
       mat.needsUpdate = true;
     }
   });
+}
+
+export function transformModel(
+  posX: number,
+  posY: number,
+  posZ: number,
+  bearing: number,
+  objectScale: number,
+  scaleUnit: number,
+  object3d: THREE.Object3D
+): void {
+  object3d.scale.set(scaleUnit * objectScale, -objectScale, scaleUnit * objectScale);
+  object3d.position.set(posX, posY, posZ);
+  object3d.rotation.y = THREE.MathUtils.degToRad(bearing);
+  object3d.matrixAutoUpdate = false;
+  object3d.updateMatrix();
+  object3d.updateMatrixWorld(true);
+}
+
+export function isGlbModel(modelUrl: string): boolean {
+  try {
+    const url = new URL(modelUrl, window.location.origin);
+    return url.pathname.toLowerCase().endsWith(".glb");
+  } catch {
+    return modelUrl.toLowerCase().split("?")[0].endsWith(".glb");
+  }
 }

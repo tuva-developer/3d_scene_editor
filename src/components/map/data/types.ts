@@ -1,3 +1,5 @@
+import type * as THREE from "three";
+
 export type LatLon = {
   lat: number;
   lon: number;
@@ -31,4 +33,9 @@ export type DataTileInfo = {
 export type Model = {
   name?: string;
   url?: string;
+};
+
+export type ModelData = {
+  object3d: THREE.Object3D;
+  animations?: THREE.AnimationClip[];
 };

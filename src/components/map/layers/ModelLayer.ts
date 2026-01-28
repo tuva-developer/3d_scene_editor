@@ -8,7 +8,7 @@ import { tileLocalToLatLon, getMetersPerExtentUnit, clampZoom } from "@/componen
 import { requestVectorTile } from "@/components/map/data/tile/request";
 import { parseVectorTile } from "@/components/map/data/convert/vectorTile";
 import { parseTileInfo } from "@/components/map/data/tile/parseTile";
-import { createLightGroup, downloadModel, prepareModelForRender } from "@/components/map/data/models/objModel";
+import { createLightGroup, downloadModel, prepareModelForRender, transformModel } from "@/components/map/data/models/objModel";
 import { calculateSunDirectionMaplibre } from "@/components/map/shadow/ShadowHelper";
 import { MaplibreShadowMesh } from "@/components/map/shadow/ShadowGeometry";
 
@@ -156,6 +156,7 @@ export class ModelLayer implements CustomLayerInterface {
       canvas: map.getCanvas(),
       context: gl,
       antialias: true,
+      alpha: true,
       stencil: true,
     });
     this.renderer.autoClear = false;
@@ -293,7 +294,7 @@ export class ModelLayer implements CustomLayerInterface {
     }
     scene.traverse((child) => {
       if (child instanceof MaplibreShadowMesh) {
-        const shadowScaleZ = child.userData.scaleUnit;
+        const shadowScaleZ = child.userData.scale_unit ?? child.userData.scaleUnit;
         child.update(new THREE.Vector3(sunDir.x, sunDir.y, -sunDir.z / shadowScaleZ));
       }
     });
@@ -361,7 +362,8 @@ export class ModelLayer implements CustomLayerInterface {
     entry.objects = objects;
     entry.overScaledTileID = overScaledTileID;
     entry.sceneTile = new THREE.Scene();
-    createLightGroup(entry.sceneTile);
+    const dirLight = (this.sun?.sunDir ?? new THREE.Vector3(0.5, 0.5, 0.5)).clone().normalize();
+    createLightGroup(entry.sceneTile, dirLight);
     if (this.sun) {
       this.createShadowGroup(entry.sceneTile);
     }
@@ -396,7 +398,7 @@ export class ModelLayer implements CustomLayerInterface {
           if (model.stateDownload === "disposed") {
             return;
           }
-          prepareModelForRender(obj3d as THREE.Object3D, !!this.sun?.shadow);
+          prepareModelForRender(obj3d as THREE.Object3D);
           obj3d.matrixAutoUpdate = false;
           model.object3d = obj3d;
           const textureLoader = new THREE.TextureLoader();
@@ -411,6 +413,7 @@ export class ModelLayer implements CustomLayerInterface {
                 }
               }
             });
+            this.map?.triggerRepaint();
           } catch (err) {
             obj3d.traverse((child) => {
               if (child instanceof THREE.Mesh) {
@@ -420,6 +423,7 @@ export class ModelLayer implements CustomLayerInterface {
                 child.add(edgeLines);
               }
             });
+            this.map?.triggerRepaint();
           }
           model.stateDownload = "loaded";
         })
@@ -461,9 +465,8 @@ export class ModelLayer implements CustomLayerInterface {
       const objectScale = (object.scale as number) ?? 1;
       const cloneObj3d = cached.object3d.clone(true);
       cloneObj3d.name = modelId;
-      cloneObj3d.position.set(object.localCoordX as number, object.localCoordY as number, cloneObj3d.position.z);
-      cloneObj3d.scale.set(scaleUnit * objectScale, -scaleUnit * objectScale, objectScale);
-      cloneObj3d.rotation.z = -THREE.MathUtils.degToRad(bearing);
+      transformModel(object.localCoordX as number, object.localCoordY as number, 0, bearing, objectScale, scaleUnit, cloneObj3d);
+      cloneObj3d.rotation.y = THREE.MathUtils.degToRad(bearing);
       cloneObj3d.matrixAutoUpdate = false;
       cloneObj3d.updateMatrix();
       cloneObj3d.updateMatrixWorld(true);
@@ -480,7 +483,7 @@ export class ModelLayer implements CustomLayerInterface {
       cloneObj3d.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           const objectShadow = new MaplibreShadowMesh(child);
-          objectShadow.userData = { scaleUnit };
+          objectShadow.userData = { scale_unit: scaleUnit };
           objectShadow.matrixAutoUpdate = false;
           mainScene.add(objectShadow);
         }

@@ -3,8 +3,9 @@ import type { CustomLayerInterface } from "maplibre-gl";
 import * as THREE from "three";
 import { MaplibreShadowMesh } from "@/components/map/shadow/ShadowGeometry";
 import { calculateSunDirectionMaplibre } from "@/components/map/shadow/ShadowHelper";
-import { createLightGroup, prepareModelForRender } from "@/components/map/data/models/objModel";
+import { createLightGroup, prepareModelForRender, transformModel } from "@/components/map/data/models/objModel";
 import { getMetersPerExtentUnit, latlonToLocal, clampZoom } from "@/components/map/data/convert/coords";
+import type { ModelData } from "@/components/map/data/types";
 
 export type SunOptions = {
   shadow: boolean;
@@ -35,7 +36,7 @@ export type EditorLayerOpts = {
 
 export type ObjectDefine = {
   id: string;
-  object3d: THREE.Object3D;
+  modeldata: ModelData;
 };
 
 export type ObjectInfoForEditorLayer = {
@@ -46,6 +47,9 @@ export type ObjectInfoForEditorLayer = {
   textureName: string;
   modelName: string;
   modelUrl: string;
+  mixer?: THREE.AnimationMixer | null;
+  actions?: THREE.AnimationAction[] | null;
+  animations?: THREE.AnimationClip[];
 };
 
 export type DataTileInfoForEditorLayer = {
@@ -70,12 +74,13 @@ export class EditLayer implements CustomLayerInterface {
   private camera: THREE.Camera | null = null;
   private visible = true;
   private raycaster = new THREE.Raycaster();
-  private modelCache: Map<string, THREE.Object3D> = new Map<string, THREE.Object3D>();
+  private modelCache: Map<string, ModelData> = new Map<string, ModelData>();
   private tileCache: Map<string, DataTileInfoForEditorLayer> = new Map<string, DataTileInfoForEditorLayer>();
   private applyGlobeMatrix = false;
   private onPick?: (info: PickHit) => void;
   private onPickFail?: () => void;
   private pickEnabled = true;
+  private clock: THREE.Clock | null = null;
 
   constructor(opts: EditorLayerOpts & { onPick?: (info: PickHit) => void } & { onPickFail?: () => void }) {
     this.id = opts.id;
@@ -121,6 +126,7 @@ export class EditLayer implements CustomLayerInterface {
     });
     this.renderer.autoClear = false;
     this.renderer.localClippingEnabled = true;
+    this.clock = new THREE.Clock();
     map.on("click", this.handleClick);
   }
 
@@ -135,17 +141,21 @@ export class EditLayer implements CustomLayerInterface {
   addObjectsToCache(objects: ObjectDefine[]): void {
     for (const obj of objects) {
       if (!this.modelCache.has(obj.id)) {
-        prepareModelForRender(obj.object3d as THREE.Object3D, false);
-        this.modelCache.set(obj.id, obj.object3d);
+        prepareModelForRender(obj.modeldata.object3d as THREE.Object3D, false);
+        this.modelCache.set(obj.id, obj.modeldata);
       }
     }
   }
 
-  addObjectToScene(id: string): void {
+  addObjectToScene(id: string, defaultScale: number = 1): void {
     if (!this.map) {
       return;
     }
-    const rootObj = this.modelCache.get(id);
+    const modelData = this.modelCache.get(id);
+    if (!modelData) {
+      return;
+    }
+    const rootObj = modelData.object3d;
     if (!rootObj) {
       return;
     }
@@ -155,24 +165,55 @@ export class EditLayer implements CustomLayerInterface {
     const tileData = this.getTileData(key);
     const cloneObj3d = rootObj.clone(true);
     const scaleUnit = getMetersPerExtentUnit(center.lat, this.editorLevel);
-    const objectScale = 10;
+    const bearing = 0;
+    const objectScale = defaultScale;
     cloneObj3d.name = id;
-    cloneObj3d.scale.set(scaleUnit * objectScale, scaleUnit * objectScale, objectScale);
-    cloneObj3d.position.set(local.coordX, local.coordY, cloneObj3d.position.z);
-    cloneObj3d.rotation.z = 0;
+    transformModel(local.coordX, local.coordY, 0, bearing, objectScale, scaleUnit, cloneObj3d);
     cloneObj3d.matrixAutoUpdate = false;
     cloneObj3d.updateMatrix();
     cloneObj3d.updateMatrixWorld(true);
+
+    let mixer: THREE.AnimationMixer | null = null;
+    let actions: THREE.AnimationAction[] | null = null;
+    if (modelData.animations && modelData.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(cloneObj3d);
+      actions = [];
+      modelData.animations.forEach((clip) => {
+        const action = mixer?.clipAction(clip);
+        if (action) {
+          action.reset();
+          action.setLoop(THREE.LoopRepeat, Infinity);
+          action.play();
+          actions?.push(action);
+        }
+      });
+    }
+
     cloneObj3d.userData = {
       tile: { z: this.editorLevel, x: local.tileX, y: local.tileY },
       isModelRoot: true,
       scaleUnit,
+      mixer,
     };
+
+    tileData.objects.push({
+      id: "",
+      name: "",
+      object3d: cloneObj3d,
+      textureUrl: "",
+      textureName: "",
+      modelName: "",
+      modelUrl: "",
+      mixer,
+      actions,
+      animations: modelData.animations ?? [],
+    });
+
     const mainScene = tileData.sceneTile;
     cloneObj3d.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         const objectShadow = new MaplibreShadowMesh(child);
-        objectShadow.userData = { scaleUnit };
+        objectShadow.userData = { scale_unit: scaleUnit };
         objectShadow.matrixAutoUpdate = false;
         mainScene.add(objectShadow);
       }
@@ -210,6 +251,10 @@ export class EditLayer implements CustomLayerInterface {
       this.camera.projectionMatrix = new THREE.Matrix4().fromArray(tileMatrix);
       this.renderer.resetState();
       this.updateShadow(tile.tileInfo.sceneTile);
+      const delta = this.clock?.getDelta();
+      if (delta) {
+        this.animate(tile.tileInfo, delta);
+      }
       this.renderer.render(tile.tileInfo.sceneTile, this.camera);
     }
   }
@@ -233,8 +278,7 @@ export class EditLayer implements CustomLayerInterface {
       return;
     }
 
-    let bestHit: { dist: number; tileKey: string; overScaledTileID: OverscaledTileID; group: THREE.Object3D } | null =
-      null;
+    let bestHit: { dist: number; tileKey: string; overScaledTileID: OverscaledTileID; group: THREE.Object3D } | null = null;
 
     for (const tid of visibleTiles) {
       const key = this.tileKey(tid.canonical.x, tid.canonical.y, tid.canonical.z);
@@ -298,7 +342,8 @@ export class EditLayer implements CustomLayerInterface {
     let tileData = this.tileCache.get(key);
     if (!tileData) {
       const scene = new THREE.Scene();
-      createLightGroup(scene);
+      const dirLight = (this.sun?.sunDir ?? new THREE.Vector3(0.5, 0.5, 0.5)).clone().normalize();
+      createLightGroup(scene, dirLight);
       tileData = {
         objects: [],
         sceneTile: scene,
@@ -315,7 +360,7 @@ export class EditLayer implements CustomLayerInterface {
     }
     scene.traverse((child) => {
       if (child instanceof MaplibreShadowMesh) {
-        const shadowScaleZ = child.userData.scaleUnit;
+        const shadowScaleZ = child.userData.scale_unit ?? child.userData.scaleUnit;
         child.update(new THREE.Vector3(sunDir.x, sunDir.y, -sunDir.z / shadowScaleZ));
       }
     });
@@ -335,5 +380,15 @@ export class EditLayer implements CustomLayerInterface {
       }
     }
     return result;
+  }
+
+  private animate(tileInfo: DataTileInfoForEditorLayer, delta: number): void {
+    tileInfo.objects.forEach((obj) => {
+      const mixer = obj.mixer;
+      if (mixer) {
+        mixer.update(delta);
+      }
+    });
+    this.map?.triggerRepaint();
   }
 }

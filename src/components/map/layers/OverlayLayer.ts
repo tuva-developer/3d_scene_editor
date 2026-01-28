@@ -1,11 +1,8 @@
 import type { Map, OverscaledTileID, CustomLayerInterface } from "maplibre-gl";
-import type { LatLon } from "@/components/map/data/types";
 import { MaplibreTransformControls } from "@/components/map/controls/MaplibreTransformControls";
 import type { HoverParameter } from "@/components/map/controls/MaplibreTransformControls";
-import { decomposeObject } from "@/components/map/data/models/objModel";
+import { decomposeObject, objectEnableClippingPlaneZ } from "@/components/map/data/models/objModel";
 import type { TransformControlsMode } from "three/examples/jsm/controls/TransformControls.js";
-import type { TransformMode } from "@/types/common";
-import { tileLocalToLatLon, getMetersPerExtentUnit } from "@/components/map/data/convert/coords";
 import * as THREE from "three";
 import { MaplibreShadowMesh } from "@/components/map/shadow/ShadowGeometry";
 
@@ -40,13 +37,9 @@ export class OverlayLayer implements CustomLayerInterface {
   private onElevationChange?: (elevation: number | null) => void;
   private isDirty = false;
   private footprintMeshes: MaplibreShadowMesh[] = [];
-  private showFootprint = false;
-  private getControlMode(mode: TransformMode): TransformControlsMode {
-    if (mode === "reset") {
-      return "translate";
-    }
-    return mode;
-  }
+  private showFootprintEnabled = false;
+  private currentMode: TransformControlsMode = "translate";
+  private currentLocalClippingPlane = false;
 
   constructor(opts: OverlayLayerOptions) {
     this.id = opts.id;
@@ -79,10 +72,7 @@ export class OverlayLayer implements CustomLayerInterface {
     this.setDirty(false);
     this.onElevationChange?.(null);
     this.clearFootprintMeshes();
-    const gizmo = this.scene.getObjectByName("TransformControls");
-    if (gizmo) {
-      this.scene.remove(gizmo);
-    }
+    this.scene.clear();
   }
 
   reset(): void {
@@ -104,26 +94,24 @@ export class OverlayLayer implements CustomLayerInterface {
     if (!this.currentObject) {
       return;
     }
-    const epsilon = 1e-4;
-    if (Math.abs(this.currentObject.position.z) <= epsilon) {
-      this.onElevationChange?.(0);
-      return;
-    }
     this.currentObject.position.z = 0;
     this.currentObject.updateMatrix();
     this.currentObject.updateMatrixWorld(true);
     this.map?.triggerRepaint();
-    // Recompute dirty state against the snapshot instead of forcing dirty=true.
     this.updateDirtyState();
     this.onElevationChange?.(0);
   }
 
-  showFootPrint(enable: boolean): void {
-    this.showFootprint = enable;
+  showFootprint(enable: boolean): void {
+    this.showFootprintEnabled = enable;
     for (const mesh of this.footprintMeshes) {
       mesh.visible = enable;
     }
     this.map?.triggerRepaint();
+  }
+
+  showFootPrint(enable: boolean): void {
+    this.showFootprint(enable);
   }
 
   showToolTip(parameter: HoverParameter): void {
@@ -134,8 +122,8 @@ export class OverlayLayer implements CustomLayerInterface {
     const decompose = decomposeObject(parameter.object3D);
     const canvas = this.map.getCanvas();
     const rect = canvas.getBoundingClientRect();
-    const screenX = (parameter.ndcX * 0.5 + 0.5) * rect.width + rect.left;
-    const screenY = (-parameter.ndcY * 0.5 + 0.5) * rect.height + rect.top;
+    const screenX = (parameter.ndc_x * 0.5 + 0.5) * rect.width + rect.left;
+    const screenY = (-parameter.ndc_y * 0.5 + 0.5) * rect.height + rect.top;
     const scale = decompose.scale;
     const bearing = decompose.bearing;
     const tileCoord = decompose.tileCoord;
@@ -162,83 +150,60 @@ export class OverlayLayer implements CustomLayerInterface {
     this.hoverDiv.style.display = "none";
   }
 
-  applyScaleZTransformGizmo(scaleZ: number): void {
+  applyScaleTransformGizmo(scaleUnit: number): void {
     if (!this.transformControl) {
       return;
     }
-    (this.transformControl as unknown as THREE.Object3D).traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const scaleMatrix = new THREE.Matrix4().makeScale(1, 1, 1 / scaleZ);
-        child.geometry.applyMatrix4(scaleMatrix);
-        child.geometry.computeBoundingBox();
-        child.geometry.computeBoundingSphere();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((mat) => {
-            mat.side = THREE.DoubleSide;
-            mat.needsUpdate = true;
-          });
-        } else {
-          child.material.side = THREE.DoubleSide;
-          child.material.needsUpdate = true;
-        }
-      }
-    });
+    const controlObj = this.transformControl as unknown as THREE.Object3D;
+    controlObj.scale.set(1, 1, 1);
+    controlObj.updateMatrix();
+    controlObj.updateMatrixWorld(true);
+    controlObj.scale.set(1, 1, 1 / scaleUnit);
   }
 
-  attachGizmoToObject(object: THREE.Object3D, mode: TransformMode = "translate"): void {
+  enableLocalClippingPlane(enable: boolean): void {
+    this.currentLocalClippingPlane = enable;
+    if (!this.currentObject) {
+      return;
+    }
+    objectEnableClippingPlaneZ(this.currentObject, this.currentLocalClippingPlane);
+  }
+
+  attachGizmoToObject(object: THREE.Object3D, mode?: TransformControlsMode): void {
     if (!this.currentTile || !this.renderer || !this.camera || !this.scene || !this.map) {
       return;
     }
-    const gizmo = this.scene.getObjectByName("TransformControls");
-    if (gizmo) {
-      this.scene.remove(gizmo);
+    if (mode) {
+      this.currentMode = mode;
     }
     if (this.transformControl) {
       this.transformControl.removeEventListener("objectChange", this.handleObjectChange);
       this.transformControl.dispose();
+      this.transformControl = null;
     }
+    this.scene.clear();
+    this.clearFootprintMeshes();
     this.currentObject = object;
     if (!this.currentObject) {
       return;
     }
+    this.enableLocalClippingPlane(this.currentLocalClippingPlane);
     this.onElevationChange?.(this.currentObject.position.z);
     this.transformControl = new MaplibreTransformControls(this.camera, this.renderer.domElement, this.map, this.applyGlobeMatrix);
-    const objX = object.position.x;
-    const objY = object.position.y;
-    const latLon: LatLon = tileLocalToLatLon(
-      this.currentTile.canonical.z,
-      this.currentTile.canonical.x,
-      this.currentTile.canonical.y,
-      objX,
-      objY
-    );
-    this.transformControl.setSize(2);
-    const scaleUnit = getMetersPerExtentUnit(latLon.lat, this.currentTile.canonical.z);
-    this.applyScaleZTransformGizmo(scaleUnit);
+    this.transformControl.setSize(1);
     this.transformControl.attach(object);
     this.objectTransformSnapshot = {
       position: object.position.clone(),
       scale: object.scale.clone(),
       quaternion: object.quaternion.clone(),
     };
-    const controlMode = this.getControlMode(mode);
-    if (controlMode === "rotate") {
-      this.transformControl.showX = false;
-      this.transformControl.showY = false;
-      this.transformControl.showZ = true;
-    } else {
-      this.transformControl.showX = true;
-      this.transformControl.showY = true;
-      this.transformControl.showZ = true;
-      (this.transformControl as unknown as THREE.Object3D).visible = true;
-    }
-    this.transformControl.setMode(controlMode);
+    this.setMode(this.currentMode);
     (this.transformControl as unknown as THREE.Object3D).name = "TransformControls";
     this.transformControl.setCurrentTile(this.currentTile);
     this.transformControl.addEventListener("objectChange", this.handleObjectChange);
     this.scene.add(this.transformControl as unknown as THREE.Object3D);
     this.buildFootprintMeshes();
-    this.showFootPrint(this.showFootprint);
+    this.showFootprint(this.showFootprintEnabled);
     this.setDirty(false);
 
     this.transformControl.onHover = (parameter: HoverParameter): void => {
@@ -249,23 +214,14 @@ export class OverlayLayer implements CustomLayerInterface {
     };
   }
 
-  setMode(mode: TransformMode): void {
-    if (!this.transformControl) {
+  setMode(mode: TransformControlsMode): void {
+    this.currentMode = mode;
+    if (!this.transformControl || !this.currentObject) {
       return;
     }
-    const controlMode = this.getControlMode(mode);
-    this.transformControl.setMode(controlMode);
-    if (controlMode === "rotate") {
-      this.transformControl.showX = false;
-      this.transformControl.showY = false;
-      this.transformControl.showZ = true;
-      (this.transformControl as unknown as THREE.Object3D).visible = true;
-    } else {
-      this.transformControl.showX = true;
-      this.transformControl.showY = true;
-      this.transformControl.showZ = true;
-      (this.transformControl as unknown as THREE.Object3D).visible = true;
-    }
+    const scaleUnit = (this.currentObject.userData as { scaleUnit?: number } | undefined)?.scaleUnit ?? 1;
+    this.transformControl.setMode(mode);
+    this.applyScaleTransformGizmo(scaleUnit);
     this.map?.triggerRepaint();
   }
 
@@ -341,7 +297,7 @@ export class OverlayLayer implements CustomLayerInterface {
     const dir = new THREE.Vector3(0, 0, 1);
     this.scene.traverse((child) => {
       if (child instanceof MaplibreShadowMesh) {
-        const scaleUnit = child.userData?.scaleUnit ?? 1;
+        const scaleUnit = child.userData?.scale_unit ?? 1;
         child.update(new THREE.Vector3(dir.x, dir.y, -dir.z / scaleUnit));
       }
     });
@@ -376,17 +332,18 @@ export class OverlayLayer implements CustomLayerInterface {
   }
 
   private buildFootprintMeshes(): void {
-    if (!this.scene || !this.currentObject) {
+    if (!this.scene || !this.currentObject || !this.renderer) {
       return;
     }
     this.clearFootprintMeshes();
+    this.renderer.clearStencil();
     const scaleUnit = (this.currentObject.userData as { scaleUnit?: number } | undefined)?.scaleUnit ?? 1;
     this.currentObject.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        const footprint = new MaplibreShadowMesh(child);
-        footprint.userData = { scaleUnit };
+        const footprint = new MaplibreShadowMesh(child, 0x00e5ff, 1.0);
+        footprint.userData = { scale_unit: scaleUnit };
         footprint.matrixAutoUpdate = false;
-        footprint.visible = this.showFootprint;
+        footprint.visible = this.showFootprintEnabled;
         this.scene?.add(footprint);
         this.footprintMeshes.push(footprint);
       }
@@ -403,5 +360,4 @@ export class OverlayLayer implements CustomLayerInterface {
     }
     this.footprintMeshes = [];
   }
-
 }

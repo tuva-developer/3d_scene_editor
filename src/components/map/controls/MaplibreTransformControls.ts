@@ -4,23 +4,11 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 
 export type HoverParameter = {
   object3D: THREE.Object3D;
-  ndcX: number;
-  ndcY: number;
+  ndc_x: number;
+  ndc_y: number;
 };
 
 export class MaplibreTransformControls extends TransformControls {
-  private static readonly AXIS_COLORS: Record<string, string> = {
-    X: "#ef4444",
-    Y: "#22c55e",
-    Z: "#3b82f6",
-    E: "#f59e0b",
-    XY: "#eab308",
-    YZ: "#14b8a6",
-    XZ: "#a855f7",
-    XYZ: "#38bdf8",
-    XYZE: "#38bdf8",
-  };
-  private static readonly HOVER_ACTIVE_COLOR = "#00d4ff";
   private map: any;
   private currentTile: any;
   private applyGlobeMatrix: boolean;
@@ -57,15 +45,20 @@ export class MaplibreTransformControls extends TransformControls {
     gizmo.updateMatrixWorld = (force?: boolean) => {
       originalUpdate(force);
       let handles: any[] = [];
+      let defaultSize = 100;
+      if (this.object) {
+        const box3 = new THREE.Box3().setFromObject(this.object);
+        const dx = box3.max.x - box3.min.x;
+        const dy = box3.max.y - box3.min.y;
+        const dz = box3.max.z - box3.min.z;
+        defaultSize = Math.max(dx, dy, dz);
+      }
       handles = handles.concat(gizmo.picker[this.mode].children);
       handles = handles.concat(gizmo.gizmo[this.mode].children);
       handles = handles.concat(gizmo.helper[this.mode].children);
-      const activeAxis = this.axis;
-      const isDarkTheme = this.isDarkTheme();
       for (let i = 0; i < handles.length; i++) {
         const handle = handles[i];
-        handle.scale.set(2800, 2800, 2800);
-        this.styleHandle(handle, activeAxis, isDarkTheme);
+        handle.scale.set(defaultSize, defaultSize, defaultSize);
         handle.updateMatrix();
         handle.updateMatrixWorld(true);
       }
@@ -102,7 +95,10 @@ export class MaplibreTransformControls extends TransformControls {
   }
 
   pointerHover(pointer: any): void {
-    if (this.object === undefined || this.dragging === true || pointer === null) {
+    if (this.object === undefined || this.dragging === true) {
+      return;
+    }
+    if (pointer === null) {
       return;
     }
     const raycaster = this.getRaycaster();
@@ -114,7 +110,7 @@ export class MaplibreTransformControls extends TransformControls {
     const intersect = this.intersectObjectWithRay(gizmo.picker[this.mode], this.getRaycaster());
     if (intersect) {
       this.axis = intersect.object.name;
-      this.onHover?.({ object3D: this.object, ndcX: pointer.x, ndcY: pointer.y });
+      this.onHover?.({ object3D: this.object, ndc_x: pointer.x, ndc_y: pointer.y });
       this.map.triggerRepaint();
     } else {
       this.onNotHover?.();
@@ -218,18 +214,20 @@ export class MaplibreTransformControls extends TransformControls {
 
         (this as any).object.position.copy((this as any)._positionStart).add((this as any)._offset.clone().multiplyScalar(0.7));
 
-        if (this.translationSnap && space === "local") {
-          object.position.applyQuaternion((this as any)._tempQuaternion.copy((this as any)._quaternionStart).invert());
-          if (axis.search("X") !== -1) {
-            object.position.x = Math.round(object.position.x / this.translationSnap) * this.translationSnap;
+        if (this.translationSnap) {
+          if (space === "local") {
+            object.position.applyQuaternion((this as any)._tempQuaternion.copy((this as any)._quaternionStart).invert());
+            if (axis.search("X") !== -1) {
+              object.position.x = Math.round(object.position.x / this.translationSnap) * this.translationSnap;
+            }
+            if (axis.search("Y") !== -1) {
+              object.position.y = Math.round(object.position.y / this.translationSnap) * this.translationSnap;
+            }
+            if (axis.search("Z") !== -1) {
+              object.position.z = Math.round(object.position.z / this.translationSnap) * this.translationSnap;
+            }
+            object.position.applyQuaternion((this as any)._quaternionStart);
           }
-          if (axis.search("Y") !== -1) {
-            object.position.y = Math.round(object.position.y / this.translationSnap) * this.translationSnap;
-          }
-          if (axis.search("Z") !== -1) {
-            object.position.z = Math.round(object.position.z / this.translationSnap) * this.translationSnap;
-          }
-          object.position.applyQuaternion((this as any)._quaternionStart);
         }
 
         object.position.x = Math.max(this.minX, Math.min(this.maxX, object.position.x));
@@ -292,7 +290,9 @@ export class MaplibreTransformControls extends TransformControls {
 
         if (space === "local" && axis !== "E" && axis !== "XYZE") {
           object.quaternion.copy((this as any)._quaternionStart);
-          object.quaternion.multiply(this.tempQuaternion.setFromAxisAngle((this as any).rotationAxis, (this as any).rotationAngle)).normalize();
+          object.quaternion
+            .multiply(this.tempQuaternion.setFromAxisAngle((this as any).rotationAxis, (this as any).rotationAngle))
+            .normalize();
           object.updateMatrixWorld();
         } else {
           (this as any).rotationAxis.applyQuaternion((this as any)._parentQuaternionInv);
@@ -311,7 +311,6 @@ export class MaplibreTransformControls extends TransformControls {
     object.updateMatrix();
     this.dispatchEvent({ type: "change" });
     this.dispatchEvent({ type: "objectChange" });
-    this.onHover?.({ object3D: object, ndcX: pointer.x, ndcY: pointer.y });
   }
 
   private intersectObjectWithRay(object: THREE.Object3D, raycaster: THREE.Raycaster, includeInvisible?: boolean): any {
@@ -340,81 +339,6 @@ export class MaplibreTransformControls extends TransformControls {
       clientY: event.clientY,
     };
   }
-
-  private styleHandle(handle: THREE.Object3D, activeAxis: string | null, isDarkTheme: boolean): void {
-    const axisName = this.getAxisFromHandleName(handle.name);
-    const highlightAll = this.mode === "translate" && activeAxis === "XYZ";
-    const isActive = highlightAll || (Boolean(activeAxis) && axisName === activeAxis);
-    const baseColor = MaplibreTransformControls.AXIS_COLORS[axisName] ?? "#94a3b8";
-    const color = new THREE.Color(isActive ? MaplibreTransformControls.HOVER_ACTIVE_COLOR : baseColor);
-    const isPlane = axisName === "XY" || axisName === "YZ" || axisName === "XZ";
-    const isArrowAxis = axisName === "X" || axisName === "Y" || axisName === "Z";
-    const isCenterHandle = axisName === "XYZ" || axisName === "XYZE";
-    const baseOpacity = isPlane ? 0.24 : isCenterHandle ? 0.4 : 0.64;
-    const opacity = isArrowAxis ? 1 : isActive ? (isPlane ? 0.44 : isCenterHandle ? 0.7 : 0.92) : baseOpacity;
-    const shapeScale = isPlane ? 0.72 : axisName === "XYZ" || axisName === "XYZE" ? 0.9 : 1;
-
-    handle.renderOrder = 10000;
-    handle.traverse((child) => {
-      this.applyShapeScale(child as THREE.Object3D, shapeScale);
-      child.renderOrder = 10000;
-      const material = (child as THREE.Mesh).material;
-      if (!material) {
-        return;
-      }
-      if (Array.isArray(material)) {
-        material.forEach((mat) => this.applyMaterialStyle(mat, color, opacity));
-      } else {
-        this.applyMaterialStyle(material, color, opacity);
-      }
-    });
-  }
-
-  private applyMaterialStyle(material: THREE.Material, color: THREE.Color, opacity: number): void {
-    const matAny = material as THREE.Material & { color?: THREE.Color; opacity?: number; transparent?: boolean; depthTest?: boolean };
-    if (matAny.color) {
-      matAny.color.copy(color);
-    }
-    if (typeof matAny.opacity === "number") {
-      matAny.opacity = opacity;
-    }
-    matAny.transparent = true;
-    matAny.depthTest = false;
-    (matAny as THREE.Material & { depthWrite?: boolean }).depthWrite = false;
-    material.needsUpdate = true;
-  }
-
-  private getAxisFromHandleName(name: string): string {
-    if (!name) {
-      return "XYZ";
-    }
-    if (name.includes("XYZ")) return "XYZ";
-    if (name.includes("XYZE")) return "XYZE";
-    if (name.includes("XY")) return "XY";
-    if (name.includes("YZ")) return "YZ";
-    if (name.includes("XZ")) return "XZ";
-    if (name.includes("X")) return "X";
-    if (name.includes("Y")) return "Y";
-    if (name.includes("Z")) return "Z";
-    if (name.includes("E")) return "E";
-    return "XYZ";
-  }
-
-  private isDarkTheme(): boolean {
-    if (typeof document === "undefined") {
-      return false;
-    }
-    return document.documentElement.classList.contains("theme-dark");
-  }
-
-  private applyShapeScale(object: THREE.Object3D, factor: number): void {
-    const anyObject = object as THREE.Object3D & {
-      userData: { __baseScale?: THREE.Vector3 };
-    };
-    if (!anyObject.userData.__baseScale) {
-      anyObject.userData.__baseScale = object.scale.clone();
-    }
-    const baseScale = anyObject.userData.__baseScale;
-    object.scale.set(baseScale.x * factor, baseScale.y * factor, baseScale.z * factor);
-  }
 }
+
+export default MaplibreTransformControls;
