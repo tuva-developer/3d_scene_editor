@@ -210,10 +210,7 @@ function App() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      <div
-        className="absolute inset-0"
-        style={{ paddingBottom: showShadowTime ? "var(--timebar-height)" : "0px" }}
-      >
+      <div className="absolute inset-0">
         <MapView
           center={mapCenter}
           zoom={16}
@@ -243,7 +240,9 @@ function App() {
             next.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
             mapHandleRef.current?.setSunTime(next);
           }}
-          onClose={() => setShowShadowTime(false)}
+          onClose={() => {
+            setShowShadowTime(false);
+          }}
         />
       ) : null}
       <LayerPanel
