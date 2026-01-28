@@ -6,7 +6,7 @@ type LayerNameModalProps = {
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  onConfirm: (value: string, file: File | null) => void;
+  onConfirm: (value: string, file: File | null, coords: { lat: number; lng: number } | null) => void;
   onCancel: () => void;
 };
 
@@ -21,10 +21,14 @@ export default function LayerNameModal({
 }: LayerNameModalProps) {
   const [value, setValue] = useState(initialValue);
   const [file, setFile] = useState<File | null>(null);
+  const [latValue, setLatValue] = useState("");
+  const [lngValue, setLngValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const inputId = useId();
   const fileId = useId();
+  const latId = useId();
+  const lngId = useId();
 
   useEffect(() => {
     if (!open) {
@@ -32,6 +36,8 @@ export default function LayerNameModal({
     }
     setValue(initialValue);
     setFile(null);
+    setLatValue("");
+    setLngValue("");
   }, [initialValue, open]);
 
   useEffect(() => {
@@ -63,7 +69,10 @@ export default function LayerNameModal({
   }
 
   const handleConfirm = () => {
-    onConfirm(value.trim(), file);
+    const lat = Number.parseFloat(latValue.trim());
+    const lng = Number.parseFloat(lngValue.trim());
+    const coords = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    onConfirm(value.trim(), file, coords);
   };
 
   return (
@@ -116,6 +125,52 @@ export default function LayerNameModal({
         />
         <div className="mt-1 text-[11px] text-[var(--text-muted)]">
           Leave empty to use the default model.
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={latId}>
+              Latitude
+            </label>
+            <input
+              id={latId}
+              type="number"
+              inputMode="decimal"
+              value={latValue}
+              onChange={(event) => setLatValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleConfirm();
+                }
+              }}
+              className="mt-1 h-10 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[13px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40"
+              placeholder="10.8231"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={lngId}>
+              Longitude
+            </label>
+            <input
+              id={lngId}
+              type="number"
+              inputMode="decimal"
+              value={lngValue}
+              onChange={(event) => setLngValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleConfirm();
+                }
+              }}
+              className="mt-1 h-10 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[13px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40"
+              placeholder="106.6297"
+            />
+          </div>
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+          Optional. Leave empty to place at the current map center.
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2">

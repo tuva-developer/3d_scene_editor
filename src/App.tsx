@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "@/components/map/MapView";
 import { EditorToolbar } from "@/components/toolbar/EditorToolbar";
+import LayerPanel from "@/components/ui/LayerPanel";
 import LayerNameModal from "@/components/ui/LayerNameModal";
 import TransformPanel from "@/components/ui/TransformPanel";
 import type { LayerOption, MapStyleOption, ThemeMode, TransformMode, TransformValues } from "@/types/common";
@@ -64,6 +65,7 @@ function App() {
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [selectionElevation, setSelectionElevation] = useState<number | null>(null);
   const [layerOptions, setLayerOptions] = useState<LayerOption[]>([{ id: "models", label: "Models (Base)" }]);
+  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({ models: true });
   const [activeLayerId, setActiveLayerId] = useState<string>(() => {
     if (typeof window === "undefined") {
       return "models";
@@ -72,6 +74,7 @@ function App() {
   });
   const [layerModalOpen, setLayerModalOpen] = useState(false);
   const [layerModalInitialName, setLayerModalInitialName] = useState("Edit Layer 1");
+  const [isLayerPanelOpen, setIsLayerPanelOpen] = useState(true);
   const [transformValues, setTransformValues] = useState<TransformValues | null>(null);
   const [styleId, setStyleId] = useState<string>(() => {
     if (typeof window === "undefined") {
@@ -102,6 +105,16 @@ function App() {
       setActiveLayerId(layerOptions[0].id);
     }
   }, [activeLayerId, layerOptions]);
+
+  useEffect(() => {
+    setLayerVisibility((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const option of layerOptions) {
+        next[option.id] = prev[option.id] ?? true;
+      }
+      return next;
+    });
+  }, [layerOptions]);
 
   useEffect(() => {
     if (currentStyle.id !== styleId) {
@@ -171,12 +184,16 @@ function App() {
     setLayerModalOpen(true);
   };
 
-  const handleConfirmLayerName = (name: string, file: File | null) => {
+  const handleConfirmLayerName = (name: string, file: File | null, coords: { lat: number; lng: number } | null) => {
     const nextName = name || layerModalInitialName;
     const modelUrl = file ? URL.createObjectURL(file) : undefined;
-    const newLayerId = mapHandleRef.current?.addEditLayer({ name: nextName, modelUrl }) ?? null;
+    const newLayerId =
+      mapHandleRef.current?.addEditLayer({ name: nextName, modelUrl, coords: coords ?? undefined }) ?? null;
     if (newLayerId) {
       setActiveLayerId(newLayerId);
+    }
+    if (coords) {
+      mapHandleRef.current?.flyToLatLng(coords.lat, coords.lng);
     }
     setLayerModalOpen(false);
   };
@@ -201,6 +218,45 @@ function App() {
         onTransformDirtyChange={setHasChanges}
         onLayerOptionsChange={setLayerOptions}
       />
+      <LayerPanel
+        layers={layerOptions}
+        activeLayerId={activeLayerId}
+        visibility={layerVisibility}
+        onSelectLayer={setActiveLayerId}
+        onToggleVisibility={(id, visible) => {
+          setLayerVisibility((prev) => ({ ...prev, [id]: visible }));
+          mapHandleRef.current?.setLayerVisibility(id, visible);
+        }}
+        onDeleteLayer={(id) => {
+          mapHandleRef.current?.removeLayer(id);
+        }}
+        onShowAll={() => {
+          setLayerVisibility((prev) => {
+            const next: Record<string, boolean> = { ...prev };
+            layerOptions.forEach((layer) => {
+              next[layer.id] = true;
+            });
+            return next;
+          });
+          layerOptions.forEach((layer) => {
+            mapHandleRef.current?.setLayerVisibility(layer.id, true);
+          });
+        }}
+        onHideAll={() => {
+          setLayerVisibility((prev) => {
+            const next: Record<string, boolean> = { ...prev };
+            layerOptions.forEach((layer) => {
+              next[layer.id] = false;
+            });
+            return next;
+          });
+          layerOptions.forEach((layer) => {
+            mapHandleRef.current?.setLayerVisibility(layer.id, false);
+          });
+        }}
+        isOpen={isLayerPanelOpen}
+        onToggleOpen={() => setIsLayerPanelOpen((prev) => !prev)}
+      />
       <TransformPanel
         values={transformValues}
         disabled={!hasSelection}
@@ -214,10 +270,14 @@ function App() {
           setMode(nextMode);
           mapHandleRef.current?.setTransformMode(nextMode);
         }}
-        showReset={hasSelection && hasChanges}
-        showSnapToGround={hasSelection && Math.abs(selectionElevation ?? 0) > 1e-4}
         onSnapToGround={() => {
           mapHandleRef.current?.snapObjectSelectedToGround();
+        }}
+        enableClippingPlane={(enable) => {
+          mapHandleRef.current?.enableClippingPlanesObjectSelected(enable);
+        }}
+        enableFootPrintWhenEdit={(enable) => {
+          mapHandleRef.current?.enableFootPrintWhenEdit(enable);
         }}
         onChange={(next) => {
           mapHandleRef.current?.setSelectedTransform(next);
@@ -242,12 +302,6 @@ function App() {
             return next;
           });
         }}
-        enableClippingPlane={(enable) => {
-          mapHandleRef.current?.enableClippingPlanesObjectSelected(enable);
-        }}
-        enableFootPrintWhenEdit={(enable) => {
-          mapHandleRef.current?.enableFootPrintWhenEdit(enable);
-        }}
         onAddLayer={() => {
           openLayerModal();
         }}
@@ -258,9 +312,10 @@ function App() {
         styleOptions={styleOptions}
         styleId={currentStyle.id}
         onChangeStyle={setStyleId}
-        layerOptions={layerOptions}
-        activeLayerId={activeLayerId}
-        onChangeActiveLayer={setActiveLayerId}
+        defaultZoom={16}
+        onFlyTo={(lat, lng, zoom) => {
+          mapHandleRef.current?.flyToLatLng(lat, lng, zoom);
+        }}
       />
       <LayerNameModal
         open={layerModalOpen}

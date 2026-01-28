@@ -29,14 +29,17 @@ export interface MapViewHandle {
   snapObjectSelectedToGround(): void;
   enableClippingPlanesObjectSelected(enable: boolean): void;
   enableFootPrintWhenEdit(enable: boolean): void;
-  addEditLayer(options?: { name?: string; modelUrl?: string }): string | null;
+  addEditLayer(options?: { name?: string; modelUrl?: string; coords?: { lat: number; lng: number } }): string | null;
   getSelectedTransform(): TransformValues | null;
   setSelectedTransform(values: Partial<TransformValues>): void;
+  flyToLatLng(lat: number, lng: number, zoom?: number): void;
+  setLayerVisibility(id: string, visible: boolean): void;
+  removeLayer(id: string): void;
 }
 
 function addControlMaplibre(map: maplibregl.Map): void {
-  map.addControl(new maplibregl.NavigationControl(), "top-right");
-  map.addControl(new maplibregl.FullscreenControl(), "top-right");
+  map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+  map.addControl(new maplibregl.FullscreenControl(), "bottom-right");
   map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 }
 
@@ -370,6 +373,48 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         }
         overlay.applyTransform(next);
       },
+      flyToLatLng(lat, lng, zoom) {
+        if (!map.current) {
+          return;
+        }
+        map.current.flyTo({
+          center: [lng, lat],
+          zoom: typeof zoom === "number" ? zoom : map.current.getZoom(),
+          essential: true,
+        });
+      },
+      setLayerVisibility(id, visible) {
+        if (id === "models") {
+          modelLayerRef.current?.setVisible(visible);
+          return;
+        }
+        const entry = editLayersRef.current.find((item) => item.layer.id === id);
+        if (entry) {
+          entry.layer.setVisible(visible);
+          map.current?.triggerRepaint();
+        }
+      },
+      removeLayer(id) {
+        if (id === "models") {
+          return;
+        }
+        const idx = editLayersRef.current.findIndex((item) => item.layer.id === id);
+        if (idx === -1) {
+          return;
+        }
+        overlayLayerRef.current?.unselect();
+        outlineLayerRef.current?.unselect();
+        const entry = editLayersRef.current[idx];
+        if (map.current?.getLayer(entry.layer.id)) {
+          map.current.removeLayer(entry.layer.id);
+        }
+        editLayersRef.current.splice(idx, 1);
+        const options: LayerOption[] = [
+          { id: "models", label: "Models (Base)" },
+          ...editLayersRef.current.map((item) => ({ id: item.layer.id, label: item.name })),
+        ];
+        onLayerOptionsChangeRef.current?.(options);
+      },
       addEditLayer(options) {
         const mainMap = map.current;
         const overlayLayer = overlayLayerRef.current;
@@ -380,7 +425,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         const id = generateId();
         const layerName = options?.name?.trim() ? options.name.trim() : `Edit Layer ${id.slice(0, 6)}`;
         const centerPoint = mainMap.getCenter();
-        const sunPos = getSunPosition(centerPoint.lat, centerPoint.lng);
+        const lat = options?.coords?.lat ?? centerPoint.lat;
+        const lng = options?.coords?.lng ?? centerPoint.lng;
+        const sunPos = getSunPosition(lat, lng);
         const sunOptions = {
           shadow: true,
           altitude: sunPos.altitude,
@@ -420,7 +467,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
                 modeldata,
               },
             ]);
-            editorLayer.addObjectToScene(glbPath, 100);
+            editorLayer.addObjectToScene(glbPath, 100, options?.coords);
             if (isBlobUrl) {
               URL.revokeObjectURL(glbPath);
             }

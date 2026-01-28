@@ -114,6 +114,11 @@ export class EditLayer implements CustomLayerInterface {
     this.pickEnabled = enabled;
   }
 
+  setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.map?.triggerRepaint?.();
+  }
+
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext): void {
     this.map = map;
     this.camera = new THREE.Camera();
@@ -147,7 +152,7 @@ export class EditLayer implements CustomLayerInterface {
     }
   }
 
-  addObjectToScene(id: string, defaultScale: number = 1): void {
+  addObjectToScene(id: string, defaultScale: number = 1, coords?: { lat: number; lng: number }): void {
     if (!this.map) {
       return;
     }
@@ -160,11 +165,13 @@ export class EditLayer implements CustomLayerInterface {
       return;
     }
     const center = this.map.getCenter();
-    const local = latlonToLocal(center.lng, center.lat, this.editorLevel);
+    const lat = coords?.lat ?? center.lat;
+    const lng = coords?.lng ?? center.lng;
+    const local = latlonToLocal(lng, lat, this.editorLevel);
     const key = this.tileKey(local.tileX, local.tileY, local.tileZ);
     const tileData = this.getTileData(key);
     const cloneObj3d = rootObj.clone(true);
-    const scaleUnit = getMetersPerExtentUnit(center.lat, this.editorLevel);
+    const scaleUnit = getMetersPerExtentUnit(lat, this.editorLevel);
     const bearing = 0;
     const objectScale = defaultScale;
     cloneObj3d.name = id;

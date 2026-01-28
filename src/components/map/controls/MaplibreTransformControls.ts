@@ -342,3 +342,4 @@ export class MaplibreTransformControls extends TransformControls {
 }
 
 export default MaplibreTransformControls;
+  
