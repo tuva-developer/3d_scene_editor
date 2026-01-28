@@ -56,6 +56,43 @@ export class OverlayLayer implements CustomLayerInterface {
     return this.currentObject;
   }
 
+  getTransform(): { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number] } | null {
+    if (!this.currentObject) {
+      return null;
+    }
+    const obj = this.currentObject;
+    return {
+      position: [obj.position.x, obj.position.y, obj.position.z],
+      rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+      scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+    };
+  }
+
+  applyTransform(values: {
+    position?: [number, number, number];
+    rotation?: [number, number, number];
+    scale?: [number, number, number];
+  }): void {
+    if (!this.currentObject) {
+      return;
+    }
+    const obj = this.currentObject;
+    if (values.position) {
+      obj.position.set(values.position[0], values.position[1], values.position[2]);
+    }
+    if (values.rotation) {
+      obj.rotation.set(values.rotation[0], values.rotation[1], values.rotation[2]);
+    }
+    if (values.scale) {
+      obj.scale.set(values.scale[0], values.scale[1], values.scale[2]);
+    }
+    obj.updateMatrix();
+    obj.updateMatrixWorld(true);
+    this.updateDirtyState();
+    this.onElevationChange?.(obj.position.z);
+    this.map?.triggerRepaint();
+  }
+
   unselect(): void {
     if (!this.scene) {
       return;

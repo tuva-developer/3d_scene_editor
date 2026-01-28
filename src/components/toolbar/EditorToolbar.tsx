@@ -1,14 +1,9 @@
 import { useState } from "react";
-import type { LayerOption, MapStyleOption, ThemeMode, TransformMode } from "@/types/common";
+import type { LayerOption, MapStyleOption, ThemeMode } from "@/types/common";
 
 interface Props {
-  mode: TransformMode;
-  onChange: (m: TransformMode) => void;
   showTiles: boolean;
   onToggleTiles: () => void;
-  showReset: boolean;
-  showSnapToGround: boolean;
-  onSnapToGround: () => void;
   enableClippingPlane: (enable: boolean) => void;
   enableFootPrintWhenEdit: (enable: boolean) => void;
   onAddLayer: () => void;
@@ -23,13 +18,8 @@ interface Props {
 }
 
 export const EditorToolbar = ({
-  mode,
-  onChange,
   showTiles,
   onToggleTiles,
-  showReset,
-  showSnapToGround,
-  onSnapToGround,
   enableClippingPlane,
   enableFootPrintWhenEdit,
   onAddLayer,
@@ -61,24 +51,14 @@ export const EditorToolbar = ({
   const sectionHeadingClassName = "px-0.5 text-[11px] font-semibold text-[var(--section-heading)]";
   const sectionBodyClassName = "flex items-center gap-1.5";
   const sectionBodyColumnClassName = "flex flex-col gap-1.5";
-  const sectionActionsClassName = "flex flex-none items-center gap-1.5";
   const toolGridClassName = "grid w-full grid-cols-2 gap-1.5";
   const selectClassName =
     "h-9 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-2.5 text-[13px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40";
-  const segmentedClassName =
-    "inline-flex items-center gap-0.5 rounded-[8px] border border-[var(--seg-border)] bg-[var(--seg-bg)] p-[3px]";
-  const segmentedButtonBaseClassName =
-    "flex h-9 w-10 flex-none items-center justify-center rounded-md text-[14px] text-[var(--text)] transition hover:bg-[var(--seg-hover)]";
-  const segmentedButtonActiveClassName =
-    "bg-[var(--btn-active-bg)] text-[var(--btn-active-text)] shadow-[var(--btn-active-ring)]";
   const buttonBaseClassName =
     "flex items-center rounded-lg border border-[var(--btn-border)] bg-[var(--btn-bg)] text-[15px] text-[var(--text)] transition hover:-translate-y-px hover:border-[var(--btn-border-hover)] hover:bg-[var(--btn-hover)]";
   const buttonStandardClassName = "h-11 w-full gap-2 px-2.5 text-left";
   const buttonActiveClassName =
     "border-[var(--btn-active-border)] bg-[var(--btn-active-bg)] text-[var(--btn-active-text)] shadow-[var(--btn-active-ring)]";
-  const buttonCompactClassName = "h-7 w-7 shrink-0 justify-center gap-0 rounded-md p-0 text-[11px]";
-  const buttonDangerClassName =
-    "border-[var(--btn-danger-border)] bg-[var(--btn-danger-bg)] text-[var(--btn-danger-text)] hover:!border-[var(--btn-danger-hover)] hover:!bg-[var(--btn-danger-hover)]";
   const toolLabelClassName = "text-[11px] font-semibold tracking-[0.01em]";
   const srOnlyClassName =
     "sr-only";
@@ -124,74 +104,6 @@ export const EditorToolbar = ({
                 </option>
               ))}
             </select>
-          </div>
-        </section>
-
-        <section className={sectionClassName} aria-label="Transform tools">
-          <div className={sectionHeadingClassName}>Transform</div>
-          <div className={sectionBodyClassName}>
-            <div className={segmentedClassName} role="radiogroup" aria-label="Transform mode">
-              <button
-                className={`${segmentedButtonBaseClassName} ${mode === "translate" ? segmentedButtonActiveClassName : ""}`}
-                onClick={() => onChange("translate")}
-                title="Move"
-                aria-label="Move"
-                role="radio"
-                aria-checked={mode === "translate"}
-              >
-                <i className="fa-solid fa-up-down-left-right" />
-                <span className={srOnlyClassName}>Move</span>
-              </button>
-              <button
-                className={`${segmentedButtonBaseClassName} ${mode === "rotate" ? segmentedButtonActiveClassName : ""}`}
-                onClick={() => onChange("rotate")}
-                title="Rotate"
-                aria-label="Rotate"
-                role="radio"
-                aria-checked={mode === "rotate"}
-              >
-                <i className="fa-solid fa-rotate" />
-                <span className={srOnlyClassName}>Rotate</span>
-              </button>
-              <button
-                className={`${segmentedButtonBaseClassName} ${mode === "scale" ? segmentedButtonActiveClassName : ""}`}
-                onClick={() => onChange("scale")}
-                title="Scale"
-                aria-label="Scale"
-                role="radio"
-                aria-checked={mode === "scale"}
-              >
-                <i className="fa-solid fa-up-right-and-down-left-from-center" />
-                <span className={srOnlyClassName}>Scale</span>
-              </button>
-            </div>
-
-            {showSnapToGround || showReset ? (
-              <div className={sectionActionsClassName} aria-label="Transform actions">
-                {showSnapToGround ? (
-                  <button
-                    className={`${buttonBaseClassName} ${buttonCompactClassName}`}
-                    onClick={onSnapToGround}
-                    title="Snap to Ground"
-                    aria-label="Snap to Ground"
-                  >
-                    <i className="fa-solid fa-arrow-down text-[10px]" />
-                    <span className={srOnlyClassName}>Snap</span>
-                  </button>
-                ) : null}
-                {showReset ? (
-                  <button
-                    className={`${buttonBaseClassName} ${buttonCompactClassName} ${buttonDangerClassName}`}
-                    onClick={() => onChange("reset")}
-                    title="Reset"
-                    aria-label="Reset"
-                  >
-                    <i className="fa-solid fa-rotate-left text-[10px]" />
-                    <span className={srOnlyClassName}>Reset</span>
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </section>
 

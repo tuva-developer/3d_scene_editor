@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import MapView from "@/components/map/MapView";
 import { EditorToolbar } from "@/components/toolbar/EditorToolbar";
 import LayerNameModal from "@/components/ui/LayerNameModal";
-import type { LayerOption, MapStyleOption, ThemeMode, TransformMode } from "@/types/common";
+import TransformPanel from "@/components/ui/TransformPanel";
+import type { LayerOption, MapStyleOption, ThemeMode, TransformMode, TransformValues } from "@/types/common";
 import type { MapViewHandle } from "@/components/map/MapView";
 
 function App() {
@@ -71,6 +72,7 @@ function App() {
   });
   const [layerModalOpen, setLayerModalOpen] = useState(false);
   const [layerModalInitialName, setLayerModalInitialName] = useState("Edit Layer 1");
+  const [transformValues, setTransformValues] = useState<TransformValues | null>(null);
   const [styleId, setStyleId] = useState<string>(() => {
     if (typeof window === "undefined") {
       return "carto-positron";
@@ -128,6 +130,41 @@ function App() {
     setSelectionElevation(null);
   }, [activeLayerId]);
 
+  useEffect(() => {
+    if (!hasSelection) {
+      setTransformValues(null);
+      return;
+    }
+    let raf = 0;
+    const epsilon = 1e-6;
+    const isClose = (a: number, b: number) => Math.abs(a - b) <= epsilon;
+    const isTransformEqual = (next: TransformValues, prev: TransformValues | null) => {
+      if (!prev) return false;
+      return (
+        isClose(next.position[0], prev.position[0]) &&
+        isClose(next.position[1], prev.position[1]) &&
+        isClose(next.position[2], prev.position[2]) &&
+        isClose(next.rotation[0], prev.rotation[0]) &&
+        isClose(next.rotation[1], prev.rotation[1]) &&
+        isClose(next.rotation[2], prev.rotation[2]) &&
+        isClose(next.scale[0], prev.scale[0]) &&
+        isClose(next.scale[1], prev.scale[1]) &&
+        isClose(next.scale[2], prev.scale[2])
+      );
+    };
+    const tick = () => {
+      const next = mapHandleRef.current?.getSelectedTransform() ?? null;
+      if (next) {
+        setTransformValues((prev) => (isTransformEqual(next, prev) ? prev : next));
+      }
+      raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(raf);
+    };
+  }, [hasSelection]);
+
   const openLayerModal = () => {
     const defaultName = `Edit Layer ${editLayerCount + 1}`;
     setLayerModalInitialName(defaultName);
@@ -164,9 +201,11 @@ function App() {
         onTransformDirtyChange={setHasChanges}
         onLayerOptionsChange={setLayerOptions}
       />
-      <EditorToolbar
+      <TransformPanel
+        values={transformValues}
+        disabled={!hasSelection}
         mode={mode}
-        onChange={(nextMode) => {
+        onChangeMode={(nextMode) => {
           if (nextMode === "reset") {
             mapHandleRef.current?.setTransformMode(nextMode);
             setMode("translate");
@@ -175,6 +214,26 @@ function App() {
           setMode(nextMode);
           mapHandleRef.current?.setTransformMode(nextMode);
         }}
+        showReset={hasSelection && hasChanges}
+        showSnapToGround={hasSelection && Math.abs(selectionElevation ?? 0) > 1e-4}
+        onSnapToGround={() => {
+          mapHandleRef.current?.snapObjectSelectedToGround();
+        }}
+        onChange={(next) => {
+          mapHandleRef.current?.setSelectedTransform(next);
+          setTransformValues((prev) => {
+            if (!prev) {
+              return prev;
+            }
+            return {
+              position: next.position ?? prev.position,
+              rotation: next.rotation ?? prev.rotation,
+              scale: next.scale ?? prev.scale,
+            };
+          });
+        }}
+      />
+      <EditorToolbar
         showTiles={showTiles}
         onToggleTiles={() => {
           setShowTiles((current) => {
@@ -182,11 +241,6 @@ function App() {
             mapHandleRef.current?.setShowTileBoundaries(next);
             return next;
           });
-        }}
-        showReset={hasSelection && hasChanges}
-        showSnapToGround={hasSelection && Math.abs(selectionElevation ?? 0) > 1e-4}
-        onSnapToGround={() => {
-          mapHandleRef.current?.snapObjectSelectedToGround();
         }}
         enableClippingPlane={(enable) => {
           mapHandleRef.current?.enableClippingPlanesObjectSelected(enable);

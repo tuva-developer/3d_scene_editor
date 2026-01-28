@@ -12,3 +12,9 @@ export type LayerOption = {
   id: string;
   label: string;
 };
+
+export type TransformValues = {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+};

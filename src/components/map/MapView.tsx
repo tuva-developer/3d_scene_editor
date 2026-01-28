@@ -5,9 +5,10 @@ import { ModelLayer } from "@/components/map/layers/ModelLayer";
 import { OverlayLayer } from "@/components/map/layers/OverlayLayer";
 import OutlineLayer from "@/components/map/layers/OutlineLayer";
 import { EditLayer } from "@/components/map/layers/EditLayer";
-import type { LayerOption, TransformMode } from "@/types/common";
+import type { LayerOption, TransformMode, TransformValues } from "@/types/common";
 import { loadModelFromGlb } from "@/components/map/data/models/objModel";
 import { getSunPosition } from "@/components/map/shadow/ShadowHelper";
+import { MathUtils } from "three";
 
 interface MapViewProps {
   center?: [number, number];
@@ -29,6 +30,8 @@ export interface MapViewHandle {
   enableClippingPlanesObjectSelected(enable: boolean): void;
   enableFootPrintWhenEdit(enable: boolean): void;
   addEditLayer(options?: { name?: string; modelUrl?: string }): string | null;
+  getSelectedTransform(): TransformValues | null;
+  setSelectedTransform(values: Partial<TransformValues>): void;
 }
 
 function addControlMaplibre(map: maplibregl.Map): void {
@@ -329,6 +332,43 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       enableFootPrintWhenEdit(enable) {
         overlayLayerRef.current?.showFootprint(enable);
         map.current?.triggerRepaint();
+      },
+      getSelectedTransform() {
+        const overlay = overlayLayerRef.current;
+        const transform = overlay?.getTransform();
+        if (!transform) {
+          return null;
+        }
+        return {
+          position: transform.position,
+          rotation: [
+            MathUtils.radToDeg(transform.rotation[0]),
+            MathUtils.radToDeg(transform.rotation[1]),
+            MathUtils.radToDeg(transform.rotation[2]),
+          ],
+          scale: transform.scale,
+        };
+      },
+      setSelectedTransform(values) {
+        const overlay = overlayLayerRef.current;
+        if (!overlay) {
+          return;
+        }
+        const next: { position?: [number, number, number]; rotation?: [number, number, number]; scale?: [number, number, number] } = {};
+        if (values.position) {
+          next.position = values.position;
+        }
+        if (values.scale) {
+          next.scale = values.scale;
+        }
+        if (values.rotation) {
+          next.rotation = [
+            MathUtils.degToRad(values.rotation[0]),
+            MathUtils.degToRad(values.rotation[1]),
+            MathUtils.degToRad(values.rotation[2]),
+          ];
+        }
+        overlay.applyTransform(next);
       },
       addEditLayer(options) {
         const mainMap = map.current;
