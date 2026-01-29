@@ -19,7 +19,7 @@ export default function LayerNameModal({
   onConfirm,
   onCancel,
 }: LayerNameModalProps) {
-  const [value, setValue] = useState(initialValue);
+  const [value, setValue] = useState(initialValue); 
   const [file, setFile] = useState<File | null>(null);
   const [latValue, setLatValue] = useState("");
   const [lngValue, setLngValue] = useState("");
@@ -76,7 +76,7 @@ export default function LayerNameModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[4000] flex items-center justify-center">
+    <div className="fixed inset-0 z-4000 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/45 backdrop-blur-[1px]"
         onClick={onCancel}
@@ -86,16 +86,16 @@ export default function LayerNameModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-[1] w-[min(92vw,360px)] rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-4 text-[var(--text)] shadow-[var(--panel-shadow)]"
+        className="relative z-1 w-[min(92vw,360px)] rounded-xl border border-(--panel-border) bg-(--panel-bg) p-4 text-(--text) shadow-(--panel-shadow)"
       >
         <div id={titleId} className="text-[15px] font-semibold">
           {title}
         </div>
-        <div className="mt-1 text-[12px] text-[var(--text-muted)]">
+        <div className="mt-1 text-[12px] text-(--text-muted)">
           Enter a friendly name to help manage layers.
         </div>
 
-        <label className="mt-3 block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={inputId}>
+        <label className="mt-3 block text-[11px] font-semibold text-(--section-heading)" htmlFor={inputId}>
           Layer Name
         </label>
         <input
@@ -109,11 +109,11 @@ export default function LayerNameModal({
               handleConfirm();
             }
           }}
-          className="mt-1 h-10 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[14px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40"
+          className="mt-1 h-10 w-full rounded-md border border-(--btn-border) bg-(--btn-bg) px-3 text-[14px] font-medium text-(--text) outline-none transition focus:border-(--btn-active-border) focus:ring-2 focus:ring-(--focus-ring)/40"
           placeholder="Layer name"
         />
 
-        <label className="mt-3 block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={fileId}>
+        <label className="mt-3 block text-[11px] font-semibold text-(--section-heading)" htmlFor={fileId}>
           Model (.glb)
         </label>
         <input
@@ -121,15 +121,15 @@ export default function LayerNameModal({
           type="file"
           accept=".glb,model/gltf-binary"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          className="mt-1 block w-full cursor-pointer text-[12px] text-[var(--text-muted)] file:mr-3 file:h-9 file:rounded-md file:border file:border-[var(--btn-border)] file:bg-[var(--btn-bg)] file:px-3 file:text-[13px] file:font-semibold file:text-[var(--text)] file:transition hover:file:border-[var(--btn-border-hover)] hover:file:bg-[var(--btn-hover)]"
+          className="mt-1 block w-full cursor-pointer text-[12px] text-(--text-muted) file:mr-3 file:h-9 file:rounded-md file:border file:border-(--btn-border) file:bg-(--btn-bg) file:px-3 file:text-[13px] file:font-semibold file:text-(--text) file:transition hover:file:border-(--btn-border-hover) hover:file:bg-(--btn-hover)"
         />
-        <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+        <div className="mt-1 text-[11px] text-(--text-muted)">
           Leave empty to use the default model.
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={latId}>
+            <label className="block text-[11px] font-semibold text-(--section-heading)" htmlFor={latId}>
               Latitude
             </label>
             <input
@@ -144,12 +144,12 @@ export default function LayerNameModal({
                   handleConfirm();
                 }
               }}
-              className="mt-1 h-10 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[13px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40"
+              className="mt-1 h-10 w-full rounded-md border border-(--btn-border) bg-(--btn-bg) px-3 text-[13px] font-medium text-(--text) outline-none transition focus:border-(--btn-active-border) focus:ring-2 focus:ring-(--focus-ring)/40"
               placeholder="10.8231"
             />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-[var(--section-heading)]" htmlFor={lngId}>
+            <label className="block text-[11px] font-semibold text-(--section-heading)" htmlFor={lngId}>
               Longitude
             </label>
             <input
@@ -164,12 +164,12 @@ export default function LayerNameModal({
                   handleConfirm();
                 }
               }}
-              className="mt-1 h-10 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[13px] font-medium text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40"
+              className="mt-1 h-10 w-full rounded-md border border-(--btn-border) bg-(--btn-bg) px-3 text-[13px] font-medium text-(--text) outline-none transition focus:border-(--btn-active-border) focus:ring-2 focus:ring-(--focus-ring)/40"
               placeholder="106.6297"
             />
           </div>
         </div>
-        <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+        <div className="mt-1 text-[11px] text-(--text-muted)">
           Optional. Leave empty to place at the current map center.
         </div>
 
@@ -177,14 +177,14 @@ export default function LayerNameModal({
           <button
             type="button"
             onClick={onCancel}
-            className="h-9 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-3 text-[13px] font-semibold text-[var(--text)] transition hover:border-[var(--btn-border-hover)] hover:bg-[var(--btn-hover)]"
+            className="h-9 rounded-md border border-(--btn-border) bg-(--btn-bg) px-3 text-[13px] font-semibold text-(--text) transition hover:border-(--btn-border-hover) hover:bg-(--btn-hover)"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="h-9 rounded-md border border-[var(--btn-active-border)] bg-[var(--btn-active-bg)] px-3 text-[13px] font-semibold text-[var(--btn-active-text)] shadow-[var(--btn-active-ring)] transition hover:brightness-105"
+            className="h-9 rounded-md border border-(--btn-active-border) bg-(--btn-active-bg) px-3 text-[13px] font-semibold text-(--btn-active-text) shadow-(--btn-active-ring) transition hover:brightness-105"
           >
             {confirmLabel}
           </button>

@@ -38,22 +38,22 @@ export default function TimeShadowBar({ minutes, date, onChange, onClose }: Time
 
   return (
     <div
-      className="absolute bottom-4 left-1/2 z-[2100] flex w-[min(980px,calc(100%-160px))] -translate-x-1/2 flex-col gap-2 rounded-xl border border-[var(--timebar-border)] bg-[var(--timebar-bg)] px-4 py-2 text-[var(--timebar-text)] shadow-[var(--timebar-shadow)]"
+      className="absolute bottom-4 left-1/2 z-2100 flex w-[min(980px,calc(100%-160px))] -translate-x-1/2 flex-col gap-2 rounded-xl border border-(--timebar-border) bg-(--timebar-bg) px-4 py-2 text-(--timebar-text) shadow-(--timebar-shadow)"
     >
       <div className="flex items-center justify-between">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--timebar-muted)]">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-(--timebar-muted)">
           Shadow Time
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-[var(--timebar-pill-border)] bg-[var(--timebar-pill-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--timebar-text)]">
+          <span className="rounded-full border border-(--timebar-pill-border) bg-(--timebar-pill-bg) px-2 py-0.5 text-[10px] font-semibold text-(--timebar-text)">
             {dateLabel}
           </span>
-          <span className="rounded-full border border-[var(--timebar-pill-border)] bg-[var(--timebar-pill-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--timebar-accent)]">
+          <span className="rounded-full border border-(--timebar-pill-border) bg-(--timebar-pill-bg) px-2 py-0.5 text-[10px] font-semibold text-(--timebar-accent)">
             {formatTime(clampedMinutes)}
           </span>
           <button
             type="button"
-            className="ml-2 rounded-full border border-[var(--timebar-pill-border)] bg-[var(--timebar-pill-bg)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--timebar-text)] transition hover:brightness-110"
+            className="ml-2 rounded-full border border-(--timebar-pill-border) bg-(--timebar-pill-bg) px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-(--timebar-text) transition hover:brightness-110"
             onClick={onClose}
           >
             Hide
@@ -61,7 +61,7 @@ export default function TimeShadowBar({ minutes, date, onChange, onClose }: Time
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--timebar-muted)]">
+      <div className="flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-(--timebar-muted)">
         {labels.map((label) => (
           <span key={label}>{label}</span>
         ))}
