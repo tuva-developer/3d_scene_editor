@@ -1,6 +1,13 @@
 import type { LayerOption } from "@/types/common";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronDown, faChevronUp, faCircle, faDotCircle, faEye, faEyeSlash, faTrash } from "@fortawesome/free-solid-svg-icons";
+import {
+  faChevronDown,
+  faChevronUp,
+  faEye,
+  faEyeSlash,
+  faLocationDot,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 
 interface Props {
   layers: LayerOption[];
@@ -9,6 +16,7 @@ interface Props {
   onSelectLayer: (id: string) => void;
   onToggleVisibility: (id: string, visible: boolean) => void;
   onDeleteLayer: (id: string) => void;
+  onJumpToLayer: (id: string) => void;
   onShowAll: () => void;
   onHideAll: () => void;
   isOpen: boolean;
@@ -22,13 +30,14 @@ export default function LayerPanel({
   onSelectLayer,
   onToggleVisibility,
   onDeleteLayer,
+  onJumpToLayer,
   onShowAll,
   onHideAll,
   isOpen,
   onToggleOpen,
 }: Props) {
   const panelClassName =
-    "absolute left-4 top-16 z-[2000] w-[280px] overflow-hidden rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--text)] shadow-[var(--panel-shadow)]";
+    "absolute left-4 top-20 z-[2000] w-[280px] overflow-hidden rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--text)] shadow-[var(--panel-shadow)]";
   const headerClassName =
     "sticky top-0 z-10 flex items-center justify-between border-b border-[var(--divider)] bg-[var(--panel-bg)]/95 px-3 py-2 backdrop-blur";
   const titleClassName = "text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
@@ -50,6 +59,9 @@ export default function LayerPanel({
     "border-[var(--btn-danger-border)] bg-[var(--btn-danger-bg)] text-[var(--btn-danger-text)] hover:!border-[var(--btn-danger-hover)] hover:!bg-[var(--btn-danger-hover)]";
   const badgeClassName =
     "mt-0.5 text-[9px] uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  const indicatorBaseClassName = "h-3.5 w-3.5 rounded-full";
+  const indicatorActiveClassName = "bg-[var(--btn-active-bg)]";
+  const indicatorInactiveClassName = "border border-[var(--btn-border)] bg-transparent";
 
   return (
     <div className={panelClassName} aria-label="Layer panel">
@@ -92,15 +104,32 @@ export default function LayerPanel({
           const isVisible = visibility[layer.id] ?? true;
           const isBase = layer.id === "models";
           return (
-            <div key={layer.id} className={`${rowClassName} ${isActive ? rowActiveClassName : ""}`}>
+            <div
+              key={layer.id}
+              className={`${rowClassName} ${isActive ? rowActiveClassName : ""}`}
+              onClick={() => onSelectLayer(layer.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectLayer(layer.id);
+                }
+              }}
+            >
               <button
                 className={buttonBaseClassName}
                 onClick={() => onSelectLayer(layer.id)}
                 title="Select layer"
                 aria-label="Select layer"
                 type="button"
+                onMouseDown={(event) => event.stopPropagation()}
               >
-                <FontAwesomeIcon icon={isActive ? faDotCircle : faCircle} />
+                <span
+                  className={`${indicatorBaseClassName} ${
+                    isActive ? indicatorActiveClassName : indicatorInactiveClassName
+                  }`}
+                />
               </button>
               <div className={nameClassName}>
                 {layer.label}
@@ -108,7 +137,10 @@ export default function LayerPanel({
               </div>
               <button
                 className={`${buttonBaseClassName} ${isVisible ? buttonActiveClassName : ""}`}
-                onClick={() => onToggleVisibility(layer.id, !isVisible)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleVisibility(layer.id, !isVisible);
+                }}
                 title={isVisible ? "Hide layer" : "Show layer"}
                 aria-label={isVisible ? "Hide layer" : "Show layer"}
                 type="button"
@@ -116,8 +148,24 @@ export default function LayerPanel({
                 <FontAwesomeIcon icon={isVisible ? faEye : faEyeSlash} />
               </button>
               <button
+                className={buttonBaseClassName}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onJumpToLayer(layer.id);
+                }}
+                title={isBase ? "Base layer cannot jump" : "Jump to layer"}
+                aria-label={isBase ? "Base layer cannot jump" : "Jump to layer"}
+                type="button"
+                disabled={isBase}
+              >
+                <FontAwesomeIcon icon={faLocationDot} />
+              </button>
+              <button
                 className={`${buttonBaseClassName} ${deleteButtonClassName}`}
-                onClick={() => onDeleteLayer(layer.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeleteLayer(layer.id);
+                }}
                 title={isBase ? "Base layer cannot be deleted" : "Delete layer"}
                 aria-label={isBase ? "Base layer cannot be deleted" : "Delete layer"}
                 type="button"

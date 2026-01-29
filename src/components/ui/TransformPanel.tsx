@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronDown,
@@ -36,6 +36,7 @@ const defaultDraft: TransformDraft = {
 };
 
 const axisLabels: Array<"X" | "Y" | "Z"> = ["X", "Y", "Z"];
+const scaleRange = { min: 0.01, max: 10, step: 0.01 };
 
 function formatNumber(value: number, decimals: number): string {
   if (!Number.isFinite(value)) {
@@ -69,6 +70,22 @@ function clampTextValue(value: string): string {
   return value.replace(/[^0-9+\-.]/g, "");
 }
 
+function getScaleMagnitude(scale: [number, number, number]): number {
+  const absX = Math.abs(scale[0]);
+  const absY = Math.abs(scale[1]);
+  const absZ = Math.abs(scale[2]);
+  const avg = (absX + absY + absZ) / 3;
+  return Number.isFinite(avg) ? avg : 1;
+}
+
+function getScaleSigns(scale: [number, number, number]): [number, number, number] {
+  return [
+    scale[0] === 0 ? 1 : Math.sign(scale[0]),
+    scale[1] === 0 ? 1 : Math.sign(scale[1]),
+    scale[2] === 0 ? 1 : Math.sign(scale[2]),
+  ];
+}
+
 export default function TransformPanel({
   values,
   onChange,
@@ -85,16 +102,30 @@ export default function TransformPanel({
   const [collapsed, setCollapsed] = useState(false);
   const [clippingEnabled, setClippingEnabled] = useState(false);
   const [footprintEnabled, setFootprintEnabled] = useState(false);
+  const [uniformScaleDraft, setUniformScaleDraft] = useState("1");
+  const [scaleSigns, setScaleSigns] = useState<[number, number, number]>([1, 1, 1]);
+  const uniformSyncRef = useRef(true);
+  const hasSelectionRef = useRef(false);
 
   useEffect(() => {
     if (!values) {
       setDraft(defaultDraft);
+      setUniformScaleDraft("1");
+      setScaleSigns([1, 1, 1]);
+      hasSelectionRef.current = false;
       return;
     }
     if (editingKey) {
       return;
     }
     setDraft(valuesToDraft(values, decimals));
+    const isNewSelection = !hasSelectionRef.current;
+    hasSelectionRef.current = true;
+    if (isNewSelection || uniformSyncRef.current) {
+      setUniformScaleDraft(formatNumber(getScaleMagnitude(values.scale), decimals.scale));
+      uniformSyncRef.current = false;
+    }
+    setScaleSigns(getScaleSigns(values.scale));
   }, [values, decimals, editingKey]);
 
   const groups = [
@@ -109,12 +140,14 @@ export default function TransformPanel({
   const titleClassName = "text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
   const titleDisabledClassName = "text-[var(--btn-danger-text)]/70";
   const subtitleClassName = "text-[10px] uppercase tracking-[0.08em] text-[var(--text-muted)]";
-  const contentClassName = "flex flex-col gap-2.5 px-3 py-2.5";
+  const contentClassName = "flex flex-col gap-3 px-3 py-2.5";
   const rowClassName = "grid grid-cols-[64px_1fr] items-center gap-2";
   const labelClassName = "text-[11px] font-semibold text-[var(--section-heading)]";
   const axisGridClassName = "grid grid-cols-[16px_1fr] items-center gap-1.5";
   const inputClassName =
     "h-7 w-full rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-2 text-[11px] text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/30 disabled:cursor-not-allowed disabled:opacity-50";
+  const inputCompactClassName =
+    "h-7 w-14 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-2 text-[11px] text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/30 disabled:cursor-not-allowed disabled:opacity-50";
   const unitClassName = "ml-1 text-[10px] text-[var(--text-muted)]";
   const segmentedClassName =
     "inline-flex items-center gap-0.5 rounded-[8px] border border-[var(--seg-border)] bg-[var(--seg-bg)] p-[3px]";
@@ -135,6 +168,8 @@ export default function TransformPanel({
   const statusDotOnClassName = "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]";
   const statusDotOffClassName = "bg-rose-400/80 shadow-[0_0_6px_rgba(244,63,94,0.4)]";
   const sectionTitleClassName = "text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  const sectionCardClassName =
+    "rounded-lg border border-[var(--seg-border)] bg-[var(--panel-bg)]/60 p-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.12)]";
 
   const isDisabled = disabled || !values;
 
@@ -151,7 +186,45 @@ export default function TransformPanel({
     }
     const nextGroup = [...values[groupKey]] as [number, number, number];
     nextGroup[axisIndex] = nextValue;
+    if (groupKey === "scale") {
+      uniformSyncRef.current = false;
+    }
     onChange({ [groupKey]: nextGroup } as Partial<TransformValues>);
+  };
+
+  const applyUniformScale = (nextScale: number) => {
+    if (!values) {
+      return;
+    }
+    const scaleValue = Math.max(scaleRange.min, Math.min(scaleRange.max, nextScale));
+    const signedScale: [number, number, number] = [
+      scaleSigns[0] * scaleValue,
+      scaleSigns[1] * scaleValue,
+      scaleSigns[2] * scaleValue,
+    ];
+    onChange({ scale: signedScale });
+  };
+
+  const syncScaleDraft = (nextScale: number) => {
+    const formatted = formatNumber(nextScale, decimals.scale);
+    setDraft((prev) => {
+      const clone = { ...prev } as TransformDraft;
+      clone.scale = [formatted, formatted, formatted];
+      return clone;
+    });
+  };
+
+  const commitUniformScale = () => {
+    const nextValue = Number.parseFloat(uniformScaleDraft);
+    if (!Number.isFinite(nextValue)) {
+      if (values) {
+        setUniformScaleDraft(formatNumber(getScaleMagnitude(values.scale), decimals.scale));
+      }
+      return;
+    }
+    uniformSyncRef.current = true;
+    syncScaleDraft(nextValue);
+    applyUniformScale(nextValue);
   };
 
   const handleToggleClip = () => {
@@ -185,70 +258,71 @@ export default function TransformPanel({
       </div>
       {collapsed ? null : (
         <div className={contentClassName}>
-          <div className={sectionTitleClassName}>Transform</div>
-          <div className="flex items-center gap-2">
-            <div
-              className="flex flex-1 items-center justify-between rounded-lg border border-[var(--seg-border)] bg-[var(--seg-bg)] px-2 py-1.5"
-            >
-              <div className="flex items-center gap-2" role="radiogroup" aria-label="Transform mode">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                  Mode
-                </span>
-                <div className={segmentedClassName}>
-                  <button
-                    className={`${segmentedButtonBaseClassName} ${
-                      mode === "translate" ? segmentedButtonActiveClassName : ""
-                    }`}
-                onClick={() => onChangeMode("translate")}
-                title="Move"
-                aria-label="Move"
-                role="radio"
-                aria-checked={mode === "translate"}
-                disabled={isDisabled}
+          <div className={sectionCardClassName}>
+            <div className={sectionTitleClassName}>Transform</div>
+            <div className="mt-2 flex items-center gap-2">
+              <div
+                className="flex flex-1 items-center justify-between rounded-lg border border-[var(--seg-border)] bg-[var(--seg-bg)] px-2 py-1.5"
               >
-                <FontAwesomeIcon icon={faUpDownLeftRight} />
-              </button>
-              <button
-                className={`${segmentedButtonBaseClassName} ${mode === "rotate" ? segmentedButtonActiveClassName : ""}`}
-                onClick={() => onChangeMode("rotate")}
-                title="Rotate"
-                aria-label="Rotate"
-                role="radio"
-                aria-checked={mode === "rotate"}
-                disabled={isDisabled}
-              >
-                <FontAwesomeIcon icon={faRotate} />
-              </button>
-              <button
-                className={`${segmentedButtonBaseClassName} ${mode === "scale" ? segmentedButtonActiveClassName : ""}`}
-                onClick={() => onChangeMode("scale")}
-                title="Scale"
-                aria-label="Scale"
-                role="radio"
-                aria-checked={mode === "scale"}
-                disabled={isDisabled}
-                  >
-                    <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
-                  </button>
+                <div className="flex items-center gap-2" role="radiogroup" aria-label="Transform mode">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    Mode
+                  </span>
+                  <div className={segmentedClassName}>
+                    <button
+                      className={`${segmentedButtonBaseClassName} ${
+                        mode === "translate" ? segmentedButtonActiveClassName : ""
+                      }`}
+                      onClick={() => onChangeMode("translate")}
+                      title="Move"
+                      aria-label="Move"
+                      role="radio"
+                      aria-checked={mode === "translate"}
+                      disabled={isDisabled}
+                    >
+                      <FontAwesomeIcon icon={faUpDownLeftRight} />
+                    </button>
+                    <button
+                      className={`${segmentedButtonBaseClassName} ${mode === "rotate" ? segmentedButtonActiveClassName : ""}`}
+                      onClick={() => onChangeMode("rotate")}
+                      title="Rotate"
+                      aria-label="Rotate"
+                      role="radio"
+                      aria-checked={mode === "rotate"}
+                      disabled={isDisabled}
+                    >
+                      <FontAwesomeIcon icon={faRotate} />
+                    </button>
+                    <button
+                      className={`${segmentedButtonBaseClassName} ${mode === "scale" ? segmentedButtonActiveClassName : ""}`}
+                      onClick={() => onChangeMode("scale")}
+                      title="Scale"
+                      aria-label="Scale"
+                      role="radio"
+                      aria-checked={mode === "scale"}
+                      disabled={isDisabled}
+                    >
+                      <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
+                    </button>
+                  </div>
                 </div>
+                <div className="h-6 w-px bg-[var(--seg-border)]" />
+                <button
+                  className={`${buttonBaseClassName} ${buttonCompactClassName} ${buttonDangerClassName}`}
+                  onClick={() => onChangeMode("reset")}
+                  title="Reset"
+                  aria-label="Reset"
+                  disabled={isDisabled}
+                >
+                  <FontAwesomeIcon icon={faRotateLeft} className="text-[10px]" />
+                </button>
               </div>
-              <div className="h-6 w-px bg-[var(--seg-border)]" />
-              <button
-                className={`${buttonBaseClassName} ${buttonCompactClassName} ${buttonDangerClassName}`}
-                onClick={() => onChangeMode("reset")}
-                title="Reset"
-                aria-label="Reset"
-                disabled={isDisabled}
-              >
-              <FontAwesomeIcon icon={faRotateLeft} className="text-[10px]" />
-              </button>
             </div>
           </div>
 
-          <div className={sectionTitleClassName}>Edit</div>
-          <div className={rowClassName}>
-            <div className={labelClassName}>Actions</div>
-            <div className="grid grid-cols-2 gap-1.5">
+          <div className={sectionCardClassName}>
+            <div className={sectionTitleClassName}>Edit</div>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
               <button
                 className={`${buttonBaseClassName} ${buttonWideClassName}`}
                 onClick={onSnapToGround}
@@ -263,7 +337,9 @@ export default function TransformPanel({
                 disabled={isDisabled}
                 type="button"
               >
-                <span className={`${statusDotBaseClassName} ${clippingEnabled ? statusDotOnClassName : statusDotOffClassName}`} />
+                <span
+                  className={`${statusDotBaseClassName} ${clippingEnabled ? statusDotOnClassName : statusDotOffClassName}`}
+                />
                 <span className="ml-1">Clip</span>
               </button>
               <button
@@ -273,53 +349,136 @@ export default function TransformPanel({
                 type="button"
                 style={{ gridColumn: "span 2" }}
               >
-                <span className={`${statusDotBaseClassName} ${footprintEnabled ? statusDotOnClassName : statusDotOffClassName}`} />
+                <span
+                  className={`${statusDotBaseClassName} ${footprintEnabled ? statusDotOnClassName : statusDotOffClassName}`}
+                />
                 <span className="ml-1">Footprint</span>
               </button>
             </div>
           </div>
 
           {groups.map((group) => (
-            <div key={group.key} className={rowClassName}>
-              <div className={labelClassName}>{group.label}</div>
-              <div className="grid gap-1">
-                {axisLabels.map((axis, axisIndex) => {
-                  const fieldKey = `${group.key}-${axis}`;
-                  return (
-                    <label key={fieldKey} className={axisGridClassName}>
-                      <span className="text-[10px] font-semibold text-[var(--text-muted)]">{axis}</span>
-                      <div className="flex items-center">
-                        <input
-                          className={inputClassName}
-                          value={draft[group.key][axisIndex]}
-                          onChange={(event) => {
-                            const next = clampTextValue(event.target.value);
-                            setDraft((prev) => {
-                              const clone = { ...prev } as TransformDraft;
-                              clone[group.key] = [...clone[group.key]] as TransformDraft[TransformGroupKey];
-                              clone[group.key][axisIndex] = next;
-                              return clone;
-                            });
-                          }}
-                          onFocus={() => setEditingKey(fieldKey)}
-                          onBlur={() => {
-                            setEditingKey(null);
-                            commitValue(group.key, axisIndex);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              (event.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          disabled={isDisabled}
-                          inputMode="decimal"
-                        />
-                        {group.unit ? <span className={unitClassName}>{group.unit}</span> : null}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
+            <div key={group.key} className={sectionCardClassName}>
+              <div className={sectionTitleClassName}>{group.label}</div>
+              {group.key === "scale" ? (
+                <div className="mt-2 grid gap-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      className="h-2 w-full accent-[var(--btn-active-bg)]"
+                      type="range"
+                      min={scaleRange.min}
+                      max={scaleRange.max}
+                      step={scaleRange.step}
+                      value={Math.max(scaleRange.min, Math.min(scaleRange.max, Number.parseFloat(uniformScaleDraft) || 1))}
+                      onChange={(event) => {
+                        const next = Number.parseFloat(event.target.value);
+                        if (!Number.isFinite(next)) {
+                          return;
+                        }
+                        uniformSyncRef.current = true;
+                        setUniformScaleDraft(formatNumber(next, decimals.scale));
+                        syncScaleDraft(next);
+                        applyUniformScale(next);
+                      }}
+                      disabled={isDisabled}
+                    />
+                    <input
+                      className={inputCompactClassName}
+                      value={uniformScaleDraft}
+                      onChange={(event) => setUniformScaleDraft(clampTextValue(event.target.value))}
+                      onFocus={() => setEditingKey("scale-uniform")}
+                      onBlur={() => {
+                        setEditingKey(null);
+                        commitUniformScale();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          (event.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      disabled={isDisabled}
+                      inputMode="decimal"
+                    />
+                  </label>
+                  <div className="grid gap-1">
+                    {axisLabels.map((axis, axisIndex) => {
+                      const fieldKey = `${group.key}-${axis}`;
+                      return (
+                        <label key={fieldKey} className={axisGridClassName}>
+                          <span className="text-[10px] font-semibold text-[var(--text-muted)]">{axis}</span>
+                          <div className="flex items-center">
+                            <input
+                              className={inputClassName}
+                              value={draft[group.key][axisIndex]}
+                              onChange={(event) => {
+                                const next = clampTextValue(event.target.value);
+                                setDraft((prev) => {
+                                  const clone = { ...prev } as TransformDraft;
+                                  clone[group.key] = [...clone[group.key]] as TransformDraft[TransformGroupKey];
+                                  clone[group.key][axisIndex] = next;
+                                  return clone;
+                                });
+                              }}
+                              onFocus={() => setEditingKey(fieldKey)}
+                              onBlur={() => {
+                                setEditingKey(null);
+                                commitValue(group.key, axisIndex);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  (event.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              disabled={isDisabled}
+                              inputMode="decimal"
+                            />
+                            {group.unit ? <span className={unitClassName}>{group.unit}</span> : null}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 grid gap-1">
+                  {axisLabels.map((axis, axisIndex) => {
+                    const fieldKey = `${group.key}-${axis}`;
+                    return (
+                      <label key={fieldKey} className={axisGridClassName}>
+                        <span className="text-[10px] font-semibold text-[var(--text-muted)]">{axis}</span>
+                        <div className="flex items-center">
+                          <input
+                            className={inputClassName}
+                            value={draft[group.key][axisIndex]}
+                            onChange={(event) => {
+                              const next = clampTextValue(event.target.value);
+                              setDraft((prev) => {
+                                const clone = { ...prev } as TransformDraft;
+                                clone[group.key] = [...clone[group.key]] as TransformDraft[TransformGroupKey];
+                                clone[group.key][axisIndex] = next;
+                                return clone;
+                              });
+                            }}
+                            onFocus={() => setEditingKey(fieldKey)}
+                            onBlur={() => {
+                              setEditingKey(null);
+                              commitValue(group.key, axisIndex);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                (event.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            disabled={isDisabled}
+                            inputMode="decimal"
+                          />
+                          {group.unit ? <span className={unitClassName}>{group.unit}</span> : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))}
         </div>

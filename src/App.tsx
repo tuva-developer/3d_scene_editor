@@ -67,6 +67,7 @@ function App() {
   const [selectionElevation, setSelectionElevation] = useState<number | null>(null);
   const [layerOptions, setLayerOptions] = useState<LayerOption[]>([{ id: "models", label: "Models (Base)" }]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({ models: true });
+  const [layerLocations, setLayerLocations] = useState<Record<string, { lat: number; lng: number }>>({});
   const [activeLayerId, setActiveLayerId] = useState<string>(() => {
     if (typeof window === "undefined") {
       return "models";
@@ -104,6 +105,7 @@ function App() {
     return stored === "light" ? "light" : "dark";
   });
   const mapHandleRef = useRef<MapViewHandle>(null);
+  const mapControlsRef = useRef<HTMLDivElement>(null);
   const mapCenter = useMemo(() => [106.6297, 10.8231] as [number, number], []);
   const currentStyle = styleOptions.find((option) => option.id === styleId) ?? styleOptions[0];
   const styleUrl = currentStyle.url;
@@ -204,10 +206,13 @@ function App() {
   const handleConfirmLayerName = (name: string, file: File | null, coords: { lat: number; lng: number } | null) => {
     const nextName = name || layerModalInitialName;
     const modelUrl = file ? URL.createObjectURL(file) : undefined;
+    const fallbackCenter = mapHandleRef.current?.getCenter() ?? { lat: mapCenter[1], lng: mapCenter[0] };
+    const targetCoords = coords ?? fallbackCenter;
     const newLayerId =
-      mapHandleRef.current?.addEditLayer({ name: nextName, modelUrl, coords: coords ?? undefined }) ?? null;
+      mapHandleRef.current?.addEditLayer({ name: nextName, modelUrl, coords: targetCoords }) ?? null;
     if (newLayerId) {
       setActiveLayerId(newLayerId);
+      setLayerLocations((prev) => ({ ...prev, [newLayerId]: targetCoords }));
     }
     if (coords) {
       mapHandleRef.current?.flyToLatLng(coords.lat, coords.lng);
@@ -224,6 +229,7 @@ function App() {
           styleUrl={styleUrl}
           activeLayerId={activeLayerId}
           ref={mapHandleRef}
+          mapControlsRef={mapControlsRef}
           showTileBoundaries={showTiles}
           onSelectionChange={(selected) => {
             setHasSelection(selected);
@@ -263,6 +269,20 @@ function App() {
         }}
         onDeleteLayer={(id) => {
           mapHandleRef.current?.removeLayer(id);
+          setLayerLocations((prev) => {
+            if (!prev[id]) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }}
+        onJumpToLayer={(id) => {
+          const coords = layerLocations[id];
+          if (coords) {
+            mapHandleRef.current?.flyToLatLng(coords.lat, coords.lng, 20);
+          }
         }}
         onShowAll={() => {
           setLayerVisibility((prev) => {
@@ -351,6 +371,7 @@ function App() {
         }}
         showShadowTime={showShadowTime}
         onToggleShadowTime={() => setShowShadowTime((prev) => !prev)}
+        mapControlsRef={mapControlsRef}
       />
       <LayerNameModal
         open={layerModalOpen}

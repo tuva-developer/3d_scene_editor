@@ -17,6 +17,7 @@ interface MapViewProps {
   activeLayerId?: string;
   style?: React.CSSProperties;
   showTileBoundaries?: boolean;
+  mapControlsRef?: React.RefObject<HTMLDivElement | null>;
   onSelectionChange?: (selected: boolean) => void;
   onSelectionElevationChange?: (elevation: number | null) => void;
   onTransformDirtyChange?: (dirty: boolean) => void;
@@ -33,15 +34,34 @@ export interface MapViewHandle {
   getSelectedTransform(): TransformValues | null;
   setSelectedTransform(values: Partial<TransformValues>): void;
   flyToLatLng(lat: number, lng: number, zoom?: number): void;
+  getCenter(): { lat: number; lng: number } | null;
   setLayerVisibility(id: string, visible: boolean): void;
   removeLayer(id: string): void;
   setSunTime(date: Date): void;
 }
 
-function addControlMaplibre(map: maplibregl.Map): void {
-  map.addControl(new maplibregl.NavigationControl(), "bottom-right");
-  map.addControl(new maplibregl.FullscreenControl(), "bottom-right");
-  map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+function addControlMaplibre(map: maplibregl.Map, container?: HTMLElement | null): () => void {
+  const navControl = new maplibregl.NavigationControl();
+  const fullscreenControl = new maplibregl.FullscreenControl();
+  const scaleControl = new maplibregl.ScaleControl();
+
+  if (container) {
+    const elements = [navControl, fullscreenControl].map((control) => control.onAdd(map));
+    elements.forEach((el) => container.appendChild(el));
+    map.addControl(scaleControl, "bottom-left");
+    return () => {
+      [navControl, fullscreenControl].forEach((control) => control.onRemove?.());
+      elements.forEach((el) => el.parentElement?.removeChild(el));
+      map.removeControl(scaleControl);
+    };
+  }
+
+  map.addControl(navControl, "bottom-right");
+  map.addControl(fullscreenControl, "bottom-right");
+  map.addControl(scaleControl, "bottom-left");
+  return () => {
+    [navControl, fullscreenControl, scaleControl].forEach((control) => map.removeControl(control));
+  };
 }
 
 function generateId(): string {
@@ -61,6 +81,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       styleUrl,
       activeLayerId,
       showTileBoundaries = true,
+      mapControlsRef,
       onSelectionChange,
       onSelectionElevationChange,
       onTransformDirtyChange,
@@ -139,7 +160,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       map.current = new maplibregl.Map(mapOptions as maplibregl.MapOptions);
 
-      addControlMaplibre(map.current);
+      const cleanupControls = addControlMaplibre(map.current, mapControlsRef?.current ?? null);
       map.current.showTileBoundaries = showTileBoundaries;
 
       const handleResize = () => {
@@ -270,11 +291,12 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         window.removeEventListener("resize", handleResize);
         map.current?.off("style.load", handleStyleLoad);
         map.current?.off("load", handleStyleLoad);
+        cleanupControls();
         if (map.current) {
           map.current.remove();
         }
       };
-    }, [center, zoom]);
+    }, [center, zoom, mapControlsRef]);
 
     useEffect(() => {
       const mainMap = map.current;
@@ -344,6 +366,11 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         if (!transform) {
           return null;
         }
+        const currentObject = overlay?.getCurrentObject();
+        const scaleUnit = (currentObject?.userData as { scaleUnit?: number } | undefined)?.scaleUnit ?? 1;
+        const objectScaleX = Math.abs((transform.scale[0] ?? 1) / scaleUnit);
+        const objectScaleY = Math.abs(transform.scale[1] ?? 1);
+        const objectScaleZ = Math.abs((transform.scale[2] ?? 1) / scaleUnit);
         return {
           position: transform.position,
           rotation: [
@@ -351,7 +378,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
             MathUtils.radToDeg(transform.rotation[1]),
             MathUtils.radToDeg(transform.rotation[2]),
           ],
-          scale: transform.scale,
+          scale: [objectScaleX, objectScaleY, objectScaleZ],
         };
       },
       setSelectedTransform(values) {
@@ -364,7 +391,25 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           next.position = values.position;
         }
         if (values.scale) {
-          next.scale = values.scale;
+          const currentObject = overlay.getCurrentObject();
+          const scaleUnit = (currentObject?.userData as { scaleUnit?: number } | undefined)?.scaleUnit ?? 1;
+          const currentScale = currentObject?.scale;
+          const fallbackSigns: [number, number, number] = [
+            currentScale?.x && currentScale.x !== 0 ? Math.sign(currentScale.x) : 1,
+            currentScale?.y && currentScale.y !== 0 ? Math.sign(currentScale.y) : -1,
+            currentScale?.z && currentScale.z !== 0 ? Math.sign(currentScale.z) : 1,
+          ];
+          const nextScaleAbs: [number, number, number] = [
+            Math.abs(values.scale[0]),
+            Math.abs(values.scale[1]),
+            Math.abs(values.scale[2]),
+          ];
+          const nextSigns: [number, number, number] = fallbackSigns;
+          next.scale = [
+            nextScaleAbs[0] * scaleUnit * nextSigns[0],
+            nextScaleAbs[1] * nextSigns[1],
+            nextScaleAbs[2] * scaleUnit * nextSigns[2],
+          ];
         }
         if (values.rotation) {
           next.rotation = [
@@ -384,6 +429,13 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           zoom: typeof zoom === "number" ? zoom : map.current.getZoom(),
           essential: true,
         });
+      },
+      getCenter() {
+        if (!map.current) {
+          return null;
+        }
+        const centerPoint = map.current.getCenter();
+        return { lat: centerPoint.lat, lng: centerPoint.lng };
       },
       setLayerVisibility(id, visible) {
         if (id === "models") {
@@ -470,7 +522,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
                 modeldata,
               },
             ]);
-            editorLayer.addObjectToScene(glbPath, 100, options?.coords);
+            editorLayer.addObjectToScene(glbPath, 1, options?.coords);
             if (isBlobUrl) {
               URL.revokeObjectURL(glbPath);
             }

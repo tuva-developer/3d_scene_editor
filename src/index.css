@@ -176,6 +176,35 @@ html, body, #root {
   border-top: 1px solid var(--map-ctrl-divider);
 }
 
+.maplibre-topbar-controls .maplibregl-ctrl {
+  margin: 0;
+}
+
+.maplibre-topbar-controls .maplibregl-ctrl-group {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.maplibre-topbar-controls .maplibregl-ctrl-group button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+}
+
+.maplibre-topbar-controls .maplibregl-ctrl-group button:hover {
+  background: var(--btn-hover);
+  border-color: var(--btn-border-hover);
+}
+
 .maplibregl-ctrl-scale {
   color: var(--map-scale-text);
   background: var(--map-scale-bg);

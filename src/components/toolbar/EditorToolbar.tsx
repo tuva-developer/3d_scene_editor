@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBorderAll, faCircleHalfStroke, faClock, faLayerGroup, faLocationDot } from "@fortawesome/free-solid-svg-icons";
+import {
+  faBorderAll,
+  faCircleHalfStroke,
+  faClock,
+  faLayerGroup,
+  faLocationDot,
+} from "@fortawesome/free-solid-svg-icons";
 import type { MapStyleOption, ThemeMode } from "@/types/common";
 
 type FlyToState = {
@@ -23,6 +29,7 @@ interface Props {
   defaultZoom: number;
   showShadowTime: boolean;
   onToggleShadowTime: () => void;
+  mapControlsRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function clampTextValue(value: string): string {
@@ -42,6 +49,7 @@ export const EditorToolbar = ({
   defaultZoom,
   showShadowTime,
   onToggleShadowTime,
+  mapControlsRef,
 }: Props) => {
   const [flyTo, setFlyTo] = useState<FlyToState>({
     open: false,
@@ -52,11 +60,17 @@ export const EditorToolbar = ({
 
   const barClassName =
     "absolute left-4 top-3 z-[2000] inline-flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg)] px-3 py-2 text-[var(--text)] shadow-[var(--panel-shadow)]";
-  const titleClassName = "text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
-  const groupClassName = "flex items-center gap-2 border-r border-[var(--divider)] pr-2";
-  const logoClassName = "h-6 w-6 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] p-1";
+  const titleClassName =
+    "text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  const groupClassName =
+    "flex items-center gap-2 border-r border-[var(--divider)] pr-2";
+  const logoClassName =
+    "h-6 w-6 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] p-1";
   const groupLastClassName = "flex items-center gap-2";
-  const labelClassName = "text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
+  const mapControlsClassName =
+    "maplibre-topbar-controls flex items-center gap-2";
+  const labelClassName =
+    "text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
   const selectClassName =
     "h-8 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-2 text-[11px] text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40";
   const buttonBaseClassName =
@@ -100,8 +114,32 @@ export const EditorToolbar = ({
     <>
       <div className={barClassName}>
         <div className={groupClassName}>
-          <img src="/logo-64.svg" alt="3D Scene Editor" className={logoClassName} />
+          <img
+            src="/logo-64.svg"
+            alt="3D Scene Editor"
+            className={logoClassName}
+          />
           <div className={titleClassName}>Scene Editor</div>
+        </div>
+
+        <div className={groupClassName}>
+          <span className={labelClassName}>Map</span>
+          {mapControlsRef ? (
+            <div
+              className={mapControlsClassName}
+              ref={mapControlsRef}
+              data-maplibre-topbar="true"
+            />
+          ) : null}
+          <button
+            className={`${buttonBaseClassName} ${buttonIconClassName}`}
+            onClick={() => setFlyTo((prev) => ({ ...prev, open: true }))}
+            type="button"
+            title="Fly To"
+            aria-label="Fly To"
+          >
+            <FontAwesomeIcon icon={faLocationDot} />
+          </button>
         </div>
 
         <div className={groupClassName}>
@@ -121,19 +159,25 @@ export const EditorToolbar = ({
               </option>
             ))}
           </select>
-        </div>
-
-        <div className={groupClassName}>
-          <span className={labelClassName}>Layer</span>
           <button
-            className={`${buttonBaseClassName} ${buttonWideClassName}`}
-            onClick={onAddLayer}
-            title="Add Edit Layer"
-            aria-label="Add Edit Layer"
+            className={`${buttonBaseClassName} ${buttonIconClassName} ${theme === "dark" ? themeToggleActiveClassName : ""}`}
+            onClick={onToggleTheme}
             type="button"
+            title={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
+            aria-label={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
           >
-            <FontAwesomeIcon icon={faLayerGroup} />
-            <span className="ml-2 text-[11px] font-semibold">Add</span>
+            <FontAwesomeIcon
+              icon={faCircleHalfStroke}
+              className={`transition-transform duration-200 ${theme === "dark" ? "rotate-180" : ""}`}
+            />
           </button>
         </div>
 
@@ -152,36 +196,25 @@ export const EditorToolbar = ({
             className={`${buttonBaseClassName} ${buttonIconClassName} ${showShadowTime ? buttonActiveClassName : ""}`}
             onClick={onToggleShadowTime}
             title={showShadowTime ? "Hide shadow time" : "Show shadow time"}
-            aria-label={showShadowTime ? "Hide shadow time" : "Show shadow time"}
+            aria-label={
+              showShadowTime ? "Hide shadow time" : "Show shadow time"
+            }
             type="button"
           >
             <FontAwesomeIcon icon={faClock} />
           </button>
         </div>
 
-        <div className={groupClassName}>
-          <span className={labelClassName}>Go</span>
-          <button
-            className={`${buttonBaseClassName} ${buttonWideClassName}`}
-            onClick={() => setFlyTo((prev) => ({ ...prev, open: true }))}
-            type="button"
-          >
-            Fly To
-          </button>
-        </div>
-
         <div className={groupLastClassName}>
+          <span className={labelClassName}>Layer</span>
           <button
-            className={`${buttonBaseClassName} ${buttonIconClassName} ${theme === "dark" ? themeToggleActiveClassName : ""}`}
-            onClick={onToggleTheme}
+            className={`${buttonBaseClassName} ${buttonIconClassName}`}
+            onClick={onAddLayer}
+            title="Add Edit Layer"
+            aria-label="Add Edit Layer"
             type="button"
-            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           >
-            <FontAwesomeIcon
-              icon={faCircleHalfStroke}
-              className={`transition-transform duration-200 ${theme === "dark" ? "rotate-180" : ""}`}
-            />
+            <FontAwesomeIcon icon={faLayerGroup} />
           </button>
         </div>
       </div>
@@ -192,7 +225,9 @@ export const EditorToolbar = ({
             <div className="flex items-center justify-between">
               <div>
                 <div className={modalTitleClassName}>Fly To</div>
-                <div className={modalSubtitleClassName}>Jump to coordinates</div>
+                <div className={modalSubtitleClassName}>
+                  Jump to coordinates
+                </div>
               </div>
               <span className={pillClassName}>
                 <FontAwesomeIcon icon={faLocationDot} />
@@ -201,34 +236,49 @@ export const EditorToolbar = ({
             </div>
             <div className="mt-3 grid gap-2.5">
               <label className={axisGridClassName}>
-                <span className="text-[10px] font-semibold text-[var(--text-muted)]">Lat</span>
+                <span className="text-[10px] font-semibold text-(--text-muted)">
+                  Lat
+                </span>
                 <input
                   className={inputClassName}
                   value={flyTo.lat}
                   onChange={(event) =>
-                    setFlyTo((prev) => ({ ...prev, lat: clampTextValue(event.target.value) }))
+                    setFlyTo((prev) => ({
+                      ...prev,
+                      lat: clampTextValue(event.target.value),
+                    }))
                   }
                   inputMode="decimal"
                 />
               </label>
               <label className={axisGridClassName}>
-                <span className="text-[10px] font-semibold text-[var(--text-muted)]">Lng</span>
+                <span className="text-[10px] font-semibold text-(--text-muted)">
+                  Lng
+                </span>
                 <input
                   className={inputClassName}
                   value={flyTo.lng}
                   onChange={(event) =>
-                    setFlyTo((prev) => ({ ...prev, lng: clampTextValue(event.target.value) }))
+                    setFlyTo((prev) => ({
+                      ...prev,
+                      lng: clampTextValue(event.target.value),
+                    }))
                   }
                   inputMode="decimal"
                 />
               </label>
               <label className={axisGridClassName}>
-                <span className="text-[10px] font-semibold text-[var(--text-muted)]">Zoom</span>
+                <span className="text-[10px] font-semibold text-(--text-muted)">
+                  Zoom
+                </span>
                 <input
                   className={inputClassName}
                   value={flyTo.zoom}
                   onChange={(event) =>
-                    setFlyTo((prev) => ({ ...prev, zoom: clampTextValue(event.target.value) }))
+                    setFlyTo((prev) => ({
+                      ...prev,
+                      zoom: clampTextValue(event.target.value),
+                    }))
                   }
                   inputMode="decimal"
                 />
