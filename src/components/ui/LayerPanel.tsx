@@ -50,7 +50,7 @@ export default function LayerPanel({
     "group flex items-center gap-2 rounded-lg border border-[var(--seg-border)] bg-[var(--seg-bg)] px-2 py-1.5 transition hover:border-[var(--btn-border-hover)] hover:bg-[var(--seg-hover)] hover:text-[var(--text)]";
   const rowActiveClassName =
     "border-[var(--btn-active-border)] bg-[var(--btn-active-bg)] text-[var(--btn-active-text)] shadow-[var(--btn-active-ring)]";
-  const nameClassName = "flex-1 text-[11px] font-semibold leading-tight";
+  const nameClassName = "flex-1 text-[11px] font-semibold leading-tight text-[var(--text)]";
   const buttonBaseClassName =
     "flex h-7 w-7 items-center justify-center rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] text-[12px] text-[var(--text)] transition hover:-translate-y-px hover:border-[var(--btn-border-hover)] hover:bg-[var(--btn-hover)]";
   const buttonActiveClassName =
