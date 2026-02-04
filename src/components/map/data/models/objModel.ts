@@ -18,6 +18,25 @@ export function convertRawMeshYupToZup(mesh: THREE.Mesh): void {
   mesh.geometry.computeBoundingSphere();
 }
 
+export function bakeWorldAndConvertYupToZup(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) {
+      return;
+    }
+    convertRawMeshYupToZup(obj);
+    reverseFaceWinding(obj.geometry);
+  });
+  root.traverse((obj) => {
+    obj.position.set(0, 0, 0);
+    obj.rotation.set(0, 0, 0);
+    obj.scale.set(1, 1, 1);
+    obj.updateMatrix();
+    obj.updateMatrixWorld();
+  });
+  root.updateMatrixWorld(true);
+}
+
 export function downloadTexture(url: string): Promise<THREE.Texture> {
   const loader = new THREE.TextureLoader();
   return loader.loadAsync(url);
@@ -120,6 +139,12 @@ export async function loadModelFromGlb(url: string): Promise<ModelData> {
   };
 }
 
+export async function loadModelFromGlbNotAnimation(url: string): Promise<THREE.Object3D> {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(url);
+  return gltf.scene as THREE.Object3D;
+}
+
 export function obj3dReceiveShadow(model: THREE.Object3D): void {
   model.traverse((child) => {
     if (child instanceof THREE.Mesh) {
@@ -127,6 +152,10 @@ export function obj3dReceiveShadow(model: THREE.Object3D): void {
       child.receiveShadow = false;
     }
   });
+}
+
+export function obj3dReviceShadow(model: THREE.Object3D): void {
+  obj3dReceiveShadow(model);
 }
 
 export function decomposeObject(model: THREE.Object3D): {

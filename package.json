@@ -13,7 +13,9 @@
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.6",
     "@mapbox/vector-tile": "^2.0.4",
+    "@turf/turf": "^7.3.3",
     "depcheck": "^1.4.7",
+    "earcut": "^3.0.2",
     "lru-cache": "^11.2.4",
     "maplibre-gl": "^5.14.0",
     "pbf": "^4.0.1",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.12",
+    "@types/geojson": "^7946.0.10",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",

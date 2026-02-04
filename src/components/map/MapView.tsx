@@ -9,6 +9,9 @@ import type { LayerOption, TransformMode, TransformValues } from "@/types/common
 import { loadModelFromGlb } from "@/components/map/data/models/objModel";
 import { getSunPosition, getSunPositionAt } from "@/components/map/shadow/ShadowHelper";
 import { MathUtils } from "three";
+import { CustomVectorSource } from "@/components/map/source/CustomVectorSource";
+import { WaterLayer } from "@/components/map/water/WaterLayer";
+import { InstanceLayer } from "@/components/map/instance/InstanceLayer";
 
 interface MapViewProps {
   center?: [number, number];
@@ -100,6 +103,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     const overlayLayerRef = useRef<OverlayLayer | null>(null);
     const outlineLayerRef = useRef<OutlineLayer | null>(null);
     const modelLayerRef = useRef<ModelLayer | null>(null);
+    const waterLayerRef = useRef<WaterLayer | null>(null);
+    const waterSourceRef = useRef<CustomVectorSource | null>(null);
+    const instanceLayerRef = useRef<InstanceLayer | null>(null);
+    const instanceSourceRef = useRef<CustomVectorSource | null>(null);
     const currentModeRef = useRef<TransformMode>("translate");
     const editLayersRef = useRef<Array<{ layer: EditLayer; name: string }>>([]);
     const styleUrlRef = useRef<string | null>(null);
@@ -186,6 +193,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         overlayLayerRef.current?.unselect();
         outlineLayerRef.current?.unselect();
         removeLayerIfExists(mainMap, "models");
+        const waterId = (import.meta.env.VITE_WATER_LAYER_ID as string | undefined)?.trim() || "water";
+        const instanceId = (import.meta.env.VITE_INSTANCE_LAYER_ID as string | undefined)?.trim() || "example_tree";
+        removeLayerIfExists(mainMap, instanceId);
+        removeLayerIfExists(mainMap, waterId);
         const overlayId = (import.meta.env.VITE_OVERLAY_LAYER_ID as string | undefined)?.trim() || "overlay";
         const outlineId = (import.meta.env.VITE_OUTLINE_LAYER_ID as string | undefined)?.trim() || "outline";
         removeLayerIfExists(mainMap, outlineId);
@@ -267,6 +278,76 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         modelLayer.setSunPos(sunPos.altitude, sunPos.azimuth);
         modelLayerRef.current = modelLayer;
         mainMap.addLayer(modelLayer);
+
+        const waterTileUrl =
+          (import.meta.env.VITE_WATER_TILE_URL as string | undefined)?.trim() ||
+          "https://images.daklak.gov.vn/v2/tile/{z}/{x}/{y}/306ec9b5-8146-4a83-9271-bd7b343a574a";
+        const waterSourceLayer =
+          (import.meta.env.VITE_WATER_SOURCE_LAYER as string | undefined)?.trim() || "region_river_index";
+        const waterLayerId = (import.meta.env.VITE_WATER_LAYER_ID as string | undefined)?.trim() || "water";
+        if (waterTileUrl && waterSourceLayer) {
+          const waterSource = new CustomVectorSource({
+            id: "water-custom-source",
+            url: waterTileUrl,
+            minZoom: 0,
+            maxZoom: 16,
+            tileSize: 512,
+            maxTileCache: 1024,
+            map: mainMap,
+          });
+          waterSourceRef.current = waterSource;
+          const waterLayer = new WaterLayer({
+            id: waterLayerId,
+            applyGlobeMatrix: false,
+            sourceLayer: waterSourceLayer,
+            sun: sunOptions,
+          });
+          waterLayer.setVectorSource(waterSource);
+          waterLayerRef.current = waterLayer;
+          const beforeId = mainMap.getLayer("fill-vnairport-index") ? "fill-vnairport-index" : undefined;
+          if (beforeId) {
+            mainMap.addLayer(waterLayer, beforeId);
+          } else {
+            mainMap.addLayer(waterLayer);
+          }
+        }
+
+        const instanceTileUrl =
+          (import.meta.env.VITE_INSTANCE_TILE_URL as string | undefined)?.trim() ||
+          "http://10.222.3.81:8083/VietbandoMapService/api/image/?Function=GetVectorTile&MapName=IndoorNavigation&Level={z}&TileX={x}&TileY={y}&UseTileCache=true";
+        const instanceSourceLayer =
+          (import.meta.env.VITE_INSTANCE_SOURCE_LAYER as string | undefined)?.trim() || "trees";
+        const instanceLayerId =
+          (import.meta.env.VITE_INSTANCE_LAYER_ID as string | undefined)?.trim() || "example_tree";
+        if (instanceTileUrl && instanceSourceLayer) {
+          const instanceSource = new CustomVectorSource({
+            id: "instance-custom-source",
+            url: instanceTileUrl,
+            minZoom: 0,
+            maxZoom: 16,
+            tileSize: 512,
+            maxTileCache: 1024,
+            map: mainMap,
+          });
+          instanceSourceRef.current = instanceSource;
+          const instanceLayer = new InstanceLayer({
+            id: instanceLayerId,
+            sourceLayer: instanceSourceLayer,
+            applyGlobeMatrix: false,
+            sun: sunOptions,
+            objectUrl: [
+              "/test_data/test_instance/tree2.glb",
+              "/test_data/test_instance/tree3.glb",
+              "/test_data/test_instance/tree4.glb",
+              "/test_data/test_instance/tree5.glb",
+              "/test_data/test_instance/tree6.glb",
+            ],
+          });
+          instanceLayer.setVectorSource(instanceSource);
+          instanceLayerRef.current = instanceLayer;
+          mainMap.addLayer(instanceLayer);
+        }
+
         mainMap.addLayer(outlineLayer);
         mainMap.addLayer(overlayLayer);
 
@@ -622,6 +703,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         const centerPoint = mainMap.getCenter();
         const sunPos = getSunPositionAt(centerPoint.lat, centerPoint.lng, date);
         modelLayerRef.current?.setSunPos(sunPos.altitude, sunPos.azimuth);
+        instanceLayerRef.current?.setSunPos(sunPos.altitude, sunPos.azimuth);
         editLayersRef.current.forEach((entry) => {
           entry.layer.setSunPos(sunPos.altitude, sunPos.azimuth);
         });
