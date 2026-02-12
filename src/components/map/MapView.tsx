@@ -15,6 +15,7 @@ import { normalizeWaterSettings, type WaterSettings } from "@/components/map/wat
 import { InstanceLayer } from "@/components/map/instance/InstanceLayer";
 
 type WeatherMode = "sun" | "rain" | "snow";
+type DaylightMode = "morning" | "noon" | "evening" | "night";
 
 interface MapViewProps {
   center?: [number, number];
@@ -24,6 +25,7 @@ interface MapViewProps {
   style?: React.CSSProperties;
   showTileBoundaries?: boolean;
   weather?: WeatherMode;
+  daylight?: DaylightMode;
   rainDensity?: number;
   snowDensity?: number;
   mapControlsRef?: React.RefObject<HTMLDivElement | null>;
@@ -127,6 +129,47 @@ type SnowFlake = {
   vy: number;
   vx: number;
   alpha: number;
+};
+
+const daylightPresets: Record<
+  DaylightMode,
+  {
+    tint: { color: string; opacity: number; blend: React.CSSProperties["mixBlendMode"] };
+    light: LightGroupOption;
+  }
+> = {
+  morning: {
+    tint: { color: "#f3c07d", opacity: 0.75, blend: "soft-light" },
+    light: {
+      directional: { intensity: 5.6, color: "#ffffff" },
+      hemisphere: { intensity: 2.9, skyColor: "#ffffff", groundColor: "#ffffff" },
+      ambient: { intensity: 1.4, color: "#ffffff" },
+    },
+  },
+  noon: {
+    tint: { color: "#ffffff", opacity: 0, blend: "normal" },
+    light: {
+      directional: { intensity: 5, color: "#ffffff" },
+      hemisphere: { intensity: 2.5, skyColor: "#ffffff", groundColor: "#ffffff" },
+      ambient: { intensity: 1.2, color: "#ffffff" },
+    },
+  },
+  evening: {
+    tint: { color: "#f08b4b", opacity: 0.75, blend: "soft-light" },
+    light: {
+      directional: { intensity: 4.2, color: "#ffffff" },
+      hemisphere: { intensity: 2.1, skyColor: "#ffffff", groundColor: "#ffffff" },
+      ambient: { intensity: 0.95, color: "#ffffff" },
+    },
+  },
+  night: {
+    tint: { color: "#471396", opacity: 0.45, blend: "multiply" },
+    light: {
+      directional: { intensity: 3.1, color: "#ffffff" },
+      hemisphere: { intensity: 1.6, skyColor: "#ffffff", groundColor: "#ffffff" },
+      ambient: { intensity: 0.7, color: "#ffffff" },
+    },
+  },
 };
 
 const WeatherOverlay = ({
@@ -346,6 +389,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       activeLayerId,
       showTileBoundaries = true,
       weather = "sun",
+      daylight = "noon",
       rainDensity = 1,
       snowDensity = 1,
       mapControlsRef,
@@ -402,6 +446,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     const activeLayerIdRef = useRef<string | undefined>(activeLayerId);
     const showTileBoundariesRef = useRef<boolean>(showTileBoundaries);
     const sunTimeRef = useRef<Date | null>(null);
+    const daylightRef = useRef<DaylightMode>(daylight);
     const onSelectionChangeRef = useRef<typeof onSelectionChange>(onSelectionChange);
     const onSelectionElevationChangeRef = useRef<typeof onSelectionElevationChange>(onSelectionElevationChange);
     const onTransformDirtyChangeRef = useRef<typeof onTransformDirtyChange>(onTransformDirtyChange);
@@ -430,6 +475,22 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     useEffect(() => {
       onLayerOptionsChangeRef.current = onLayerOptionsChange;
     }, [onLayerOptionsChange]);
+
+    useEffect(() => {
+      daylightRef.current = daylight;
+    }, [daylight]);
+
+    const applyDaylightToLayers = (mode: DaylightMode) => {
+      const preset = daylightPresets[mode];
+      modelLayerRef.current?.setLightOption(preset.light);
+      instanceLayerRef.current.forEach((layer) => {
+        layer.setLightOption(preset.light);
+      });
+      editLayersRef.current.forEach((entry) => {
+        entry.layer.setLightOption(preset.light);
+      });
+      map.current?.triggerRepaint();
+    };
 
     useEffect(() => {
       if (!mapContainer.current) return;
@@ -639,6 +700,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         mainMap.showTileBoundaries = showTileBoundariesRef.current;
         updatePickEnabled();
         onLayerOptionsChangeRef.current?.(getLayerOptions());
+        applyDaylightToLayers(daylightRef.current);
       };
 
       const handleStyleLoad = () => {
@@ -694,6 +756,14 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         map.current.showTileBoundaries = showTileBoundaries;
       }
     }, [showTileBoundaries]);
+
+    useEffect(() => {
+      const mainMap = map.current;
+      if (!mainMap) {
+        return;
+      }
+      applyDaylightToLayers(daylight);
+    }, [daylight]);
 
     useImperativeHandle(ref, () => ({
       setTransformMode(m) {
@@ -1155,8 +1225,21 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       },
     }));
 
+    const daylightTint = daylightPresets[daylight].tint;
+
     return (
       <div ref={mapContainer} className="relative h-full w-full">
+        {daylightTint.opacity > 0 ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-[6]"
+            style={{
+              backgroundColor: daylightTint.color,
+              opacity: daylightTint.opacity,
+              mixBlendMode: daylightTint.blend,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
         <WeatherOverlay mode={weather} rainDensity={rainDensity} snowDensity={snowDensity} />
       </div>
     );

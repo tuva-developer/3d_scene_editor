@@ -5,13 +5,17 @@ import {
   faCircleHalfStroke,
   faClock,
   faCloudRain,
+  faCloudMoon,
+  faCloudSun,
   faLocationDot,
+  faMoon,
   faSnowflake,
   faSun,
 } from "@fortawesome/free-solid-svg-icons";
-import type { MapStyleOption, ThemeMode } from "@/types/common";
+import type { ThemeMode } from "@/types/common";
 
 type WeatherOption = "sun" | "rain" | "snow";
+type DaylightMode = "morning" | "noon" | "evening" | "night";
 
 type FlyToState = {
   open: boolean;
@@ -20,20 +24,37 @@ type FlyToState = {
   zoom: string;
 };
 
+type SearchResponse = {
+  Error: string | null;
+  IsSuccess: boolean;
+  ResponseTime: string;
+  HasMoreItem: boolean;
+  List: string[];
+  TotalCount: number;
+};
+
+type GeoCodingResponse = {
+  Value?: {
+    Result?: {
+      Latitude?: number;
+      Longitude?: number;
+    };
+  };
+};
+
 interface Props {
   showTiles: boolean;
   onToggleTiles: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
-  styleOptions: MapStyleOption[];
-  styleId: string;
-  onChangeStyle: (styleId: string) => void;
   onFlyTo: (lat: number, lng: number, zoom?: number) => void;
   defaultZoom: number;
   showShadowTime: boolean;
   onToggleShadowTime: () => void;
   weather: WeatherOption;
   onChangeWeather: (weather: WeatherOption) => void;
+  daylight: DaylightMode;
+  onChangeDaylight: (mode: DaylightMode) => void;
   rainDensity: number;
   snowDensity: number;
   onChangeRainDensity: (value: number) => void;
@@ -50,15 +71,14 @@ export const EditorToolbar = ({
   onToggleTiles,
   theme,
   onToggleTheme,
-  styleOptions,
-  styleId,
-  onChangeStyle,
   onFlyTo,
   defaultZoom,
   showShadowTime,
   onToggleShadowTime,
   weather,
   onChangeWeather,
+  daylight,
+  onChangeDaylight,
   rainDensity,
   snowDensity,
   onChangeRainDensity,
@@ -67,6 +87,15 @@ export const EditorToolbar = ({
 }: Props) => {
   const [weatherMenuOpen, setWeatherMenuOpen] = useState(false);
   const weatherMenuRef = useRef<HTMLDivElement | null>(null);
+  const [daylightMenuOpen, setDaylightMenuOpen] = useState(false);
+  const daylightMenuRef = useRef<HTMLDivElement | null>(null);
+  const [searchValue, setSearchValue] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
   const [flyTo, setFlyTo] = useState<FlyToState>({
     open: false,
     lat: "10.8231",
@@ -87,8 +116,6 @@ export const EditorToolbar = ({
     "maplibre-topbar-controls flex items-center gap-2";
   const labelClassName =
     "text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]";
-  const selectClassName =
-    "h-8 rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] px-2 text-[11px] text-[var(--text)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40";
   const buttonBaseClassName =
     "flex h-8 items-center justify-center rounded-md border border-[var(--btn-border)] bg-[var(--btn-bg)] text-[12px] text-[var(--text)] transition hover:border-[var(--btn-border-hover)] hover:bg-[var(--btn-hover)]";
   const buttonIconClassName = "w-8";
@@ -136,6 +163,22 @@ export const EditorToolbar = ({
     "bg-[var(--btn-active-bg)] text-[var(--btn-active-text)]";
   const weatherSliderClassName =
     "h-8 w-full cursor-pointer accent-[var(--btn-active-bg)]";
+  const searchInputClassName =
+    "h-9 w-[260px] rounded-full border border-[var(--btn-border)] bg-[var(--btn-bg)] px-9 text-[12px] text-[var(--text)] shadow-[var(--panel-shadow)] outline-none transition focus:border-[var(--btn-active-border)] focus:ring-2 focus:ring-[color:var(--focus-ring)]/40 placeholder:text-[var(--text-muted)]";
+  const searchItemClassName =
+    "flex min-h-8 items-start gap-2 text-left rounded-md px-2 py-1 text-[12px] transition";
+  const daylightLabel: Record<DaylightMode, string> = {
+    morning: "Morning",
+    noon: "Noon",
+    evening: "Evening",
+    night: "Night",
+  };
+  const daylightIcon: Record<DaylightMode, typeof faSun> = {
+    morning: faCloudSun,
+    noon: faSun,
+    evening: faCloudMoon,
+    night: faMoon,
+  };
 
   useEffect(() => {
     if (!weatherMenuOpen) {
@@ -156,6 +199,135 @@ export const EditorToolbar = ({
       window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [weatherMenuOpen]);
+
+  useEffect(() => {
+    if (!daylightMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      if (daylightMenuRef.current?.contains(target)) {
+        return;
+      }
+      setDaylightMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [daylightMenuOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      if (searchRef.current?.contains(target)) {
+        return;
+      }
+      setSearchOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    const keyword = searchValue.trim();
+    if (keyword.length < 2) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        setSearchError(null);
+        const registerKey =
+          (import.meta.env.VITE_VIETBANDO_REGISTER_KEY as string | undefined)?.trim() ||
+          "00d1eec9-0632-42ba-a085-2133667b3cd9";
+        const response = await fetch(
+          "/api/vbd/AutoSuggestSearch",
+          {
+            method: "POST",
+            headers: {
+              Connection: "keep-alive",
+              "Content-Type": "application/json",
+              RegisterKey: registerKey,
+            },
+            body: JSON.stringify({ Keyword: keyword }),
+            signal: controller.signal,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = (await response.json()) as SearchResponse;
+        if (!data.IsSuccess) {
+          throw new Error(data.Error || "Search failed");
+        }
+        setSearchResults(data.List ?? []);
+      } catch (err) {
+        if ((err as DOMException).name === "AbortError") {
+          return;
+        }
+        setSearchError((err as Error).message || "Search failed");
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [searchValue]);
+
+  const handleSelectSuggestion = async (address: string) => {
+    setSearchValue(address);
+    setSearchOpen(false);
+    setGeoLoading(true);
+    try {
+      const registerKey =
+        (import.meta.env.VITE_VIETBANDO_REGISTER_KEY as string | undefined)?.trim() ||
+        "00d1eec9-0632-42ba-a085-2133667b3cd9";
+      const response = await fetch("/api/vbd/GeoCoding", {
+        method: "POST",
+        headers: {
+          Connection: "keep-alive",
+          "Content-Type": "application/json",
+          RegisterKey: registerKey,
+        },
+        body: JSON.stringify({ Address: address }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as GeoCodingResponse;
+      const lat = data.Value?.Result?.Latitude;
+      const lon = data.Value?.Result?.Longitude;
+      if (typeof lat === "number" && typeof lon === "number") {
+        onFlyTo(lat, lon, defaultZoom);
+      } else {
+        throw new Error("No location data");
+      }
+    } catch (err) {
+      setSearchError((err as Error).message || "GeoCoding failed");
+    } finally {
+      setGeoLoading(false);
+    }
+  };
 
   const handleFlyTo = () => {
     const lat = Number.parseFloat(flyTo.lat);
@@ -184,6 +356,74 @@ export const EditorToolbar = ({
 
         <div className={groupClassName}>
           <span className={labelClassName}>Map</span>
+          <div className="relative" ref={searchRef}>
+            <label className="sr-only" htmlFor="map-search-input">
+              Search location
+            </label>
+            <input
+              id="map-search-input"
+              className={searchInputClassName}
+              value={searchValue}
+              placeholder="Search location"
+              onFocus={() => setSearchOpen(true)}
+              onChange={(event) => {
+                setSearchValue(event.target.value);
+                setSearchOpen(true);
+              }}
+              type="text"
+              autoComplete="off"
+            />
+            <span
+              className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 ${
+                theme === "dark" ? "text-slate-400" : "text-slate-400"
+              }`}
+            >
+              <FontAwesomeIcon icon={faLocationDot} />
+            </span>
+            {searchOpen && (searchLoading || searchError || searchResults.length > 0) ? (
+              <div
+              className="absolute left-0 top-full z-[2100] mt-2 w-[320px] rounded-xl border border-[var(--panel-border)] bg-[var(--panel-bg)] p-1 shadow-[var(--panel-shadow)] backdrop-blur"
+                role="listbox"
+              >
+                {searchLoading ? (
+                  <div className="px-2 py-1 text-[12px] text-[var(--text-muted)]">
+                    Searching...
+                  </div>
+                ) : null}
+                {geoLoading ? (
+                  <div className="px-2 py-1 text-[12px] text-[var(--text-muted)]">
+                    Locating...
+                  </div>
+                ) : null}
+                {searchError ? (
+                  <div className="px-2 py-1 text-[12px] text-rose-500">
+                    {searchError}
+                  </div>
+                ) : null}
+                {!searchLoading && !searchError && searchResults.length === 0 ? (
+                  <div className="px-2 py-1 text-[12px] text-[var(--text-muted)]">
+                    No results
+                  </div>
+                ) : null}
+                {searchResults.map((item) => (
+                  <button
+                    key={item}
+                    className={`${searchItemClassName} text-[var(--text)] hover:bg-[var(--btn-hover)]`}
+                    type="button"
+                    role="option"
+                    onClick={() => {
+                      handleSelectSuggestion(item);
+                    }}
+                  >
+                    <span className="mt-0.5 text-[var(--text-muted)]">
+                      <FontAwesomeIcon icon={faLocationDot} />
+                    </span>
+                    {item}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           {mapControlsRef ? (
             <div
               className={mapControlsClassName}
@@ -203,22 +443,7 @@ export const EditorToolbar = ({
         </div>
 
         <div className={groupClassName}>
-          <span className={labelClassName}>Style</span>
-          <label className="sr-only" htmlFor="map-style-select">
-            Map style
-          </label>
-          <select
-            id="map-style-select"
-            className={selectClassName}
-            value={styleId}
-            onChange={(event) => onChangeStyle(event.target.value)}
-          >
-            {styleOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <span className={labelClassName}>Theme</span>
           <button
             className={`${buttonBaseClassName} ${buttonIconClassName} ${theme === "dark" ? themeToggleActiveClassName : ""}`}
             onClick={onToggleTheme}
@@ -297,6 +522,41 @@ export const EditorToolbar = ({
                     onChange={(event) => onChangeSnowDensity(Number(event.target.value))}
                   />
                 </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className={groupClassName}>
+          <span className={labelClassName}>Daylight</span>
+          <div className="relative" ref={daylightMenuRef}>
+            <button
+              className={`${buttonBaseClassName} ${buttonWideClassName} gap-2`}
+              onClick={() => setDaylightMenuOpen((prev) => !prev)}
+              title={`Daylight: ${daylightLabel[daylight]}`}
+              aria-label={`Daylight: ${daylightLabel[daylight]}`}
+              type="button"
+            >
+              <FontAwesomeIcon icon={daylightIcon[daylight]} />
+              {daylightLabel[daylight]}
+            </button>
+            {daylightMenuOpen ? (
+              <div className={weatherMenuClassName} role="menu">
+                {(["morning", "noon", "evening", "night"] as DaylightMode[]).map((option) => (
+                  <button
+                    key={option}
+                    className={`${weatherMenuItemClassName} ${daylight === option ? weatherMenuItemActiveClassName : ""}`}
+                    onClick={() => {
+                      onChangeDaylight(option);
+                      setDaylightMenuOpen(false);
+                    }}
+                    type="button"
+                    role="menuitem"
+                  >
+                    <FontAwesomeIcon icon={daylightIcon[option]} />
+                    {daylightLabel[option]}
+                  </button>
+                ))}
               </div>
             ) : null}
           </div>

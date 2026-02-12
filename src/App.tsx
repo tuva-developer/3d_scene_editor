@@ -9,62 +9,13 @@ import WaterSettingsModal from "@/components/ui/WaterSettingsModal";
 import LightSettingsModal, { type LightIntensitySettings } from "@/components/ui/LightSettingsModal";
 import TimeShadowBar from "@/components/ui/TimeShadowBar";
 import TransformPanel from "@/components/ui/TransformPanel";
-import type { LayerModelInfo, LayerOption, MapStyleOption, ThemeMode, TransformMode, TransformValues } from "@/types/common";
+import type { LayerModelInfo, LayerOption, ThemeMode, TransformMode, TransformValues } from "@/types/common";
 import type { MapViewHandle } from "@/components/map/MapView";
 import type { LightGroupOption } from "@/components/map/data/models/objModel";
 import { DEFAULT_WATER_SETTINGS, type WaterSettings } from "@/components/map/water/WaterMaterial";
 
 function App() {
-  const envStylePath = (import.meta.env.VITE_STYLE_PATH as string | undefined)?.trim() ?? "";
-  const styleOptions: MapStyleOption[] = useMemo(() => {
-    const options: MapStyleOption[] = [
-      {
-        id: "openfreemap-liberty",
-        label: "OpenFreeMap Liberty",
-        url: "https://tiles.openfreemap.org/styles/liberty",
-      },
-      {
-        id: "openfreemap-bright",
-        label: "OpenFreeMap Bright",
-        url: "https://tiles.openfreemap.org/styles/bright",
-      },
-      {
-        id: "openfreemap-positron",
-        label: "OpenFreeMap Positron",
-        url: "https://tiles.openfreemap.org/styles/positron",
-      },
-      {
-        id: "maplibre-demotiles",
-        label: "MapLibre Demo",
-        url: "https://demotiles.maplibre.org/style.json",
-      },
-      {
-        id: "carto-positron",
-        label: "CARTO Positron",
-        url: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-      },
-      {
-        id: "carto-voyager",
-        label: "CARTO Voyager",
-        url: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-      },
-      {
-        id: "carto-dark-matter",
-        label: "CARTO Dark Matter",
-        url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-      },
-    ];
-
-    if (envStylePath) {
-      options.unshift({
-        id: "env-custom",
-        label: "Custom (Env)",
-        url: envStylePath,
-      });
-    }
-
-    return options;
-  }, [envStylePath]);
+  const styleUrl = (import.meta.env.VITE_STYLE_PATH as string | undefined)?.trim() ?? "";
 
   const [mode, setMode] = useState<TransformMode>("translate");
   const [showTiles, setShowTiles] = useState<boolean>(false);
@@ -98,6 +49,7 @@ function App() {
   });
   const [showShadowTime, setShowShadowTime] = useState(true);
   const [weather, setWeather] = useState<"sun" | "rain" | "snow">("sun");
+  const [daylight, setDaylight] = useState<"morning" | "noon" | "evening" | "night">("noon");
   const [rainDensity, setRainDensity] = useState(1.4);
   const [snowDensity, setSnowDensity] = useState(1.3);
   const [transformValues, setTransformValues] = useState<TransformValues | null>(null);
@@ -117,16 +69,6 @@ function App() {
   const [lightSettingsTargetId, setLightSettingsTargetId] = useState<string | null>(null);
   const instanceBlobUrlsRef = useRef<Map<string, string[]>>(new Map());
   const waterBlobUrlsRef = useRef<Map<string, string>>(new Map());
-  const [styleId, setStyleId] = useState<string>(() => {
-    if (typeof window === "undefined") {
-      return "carto-positron";
-    }
-    const stored = window.localStorage.getItem("scene-editor-style-id");
-    if (stored) {
-      return stored;
-    }
-    return "carto-positron";
-  });
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") {
       return "dark";
@@ -137,8 +79,6 @@ function App() {
   const mapHandleRef = useRef<MapViewHandle>(null);
   const mapControlsRef = useRef<HTMLDivElement>(null);
   const mapCenter = useMemo(() => [106.6297, 10.8231] as [number, number], []);
-  const currentStyle = styleOptions.find((option) => option.id === styleId) ?? styleOptions[0];
-  const styleUrl = currentStyle.url;
   const editLayerCount = mapLayerOptions.filter((option) => option.id !== "models").length;
   const customLayerCount = customInstanceLayers.length;
   const customWaterCount = customWaterLayers.length;
@@ -200,6 +140,29 @@ function App() {
     };
     mapHandleRef.current?.setLayerLightOption(layerId, option);
     setLayerLightSettings((prev) => ({ ...prev, [layerId]: next }));
+  };
+
+  const applyDaylight = (mode: "morning" | "noon" | "evening" | "night") => {
+    setDaylight(mode);
+    const presetMinutes =
+      mode === "morning" ? 8 * 60 : mode === "noon" ? 12 * 60 : mode === "evening" ? 17 * 60 + 30 : 21 * 60;
+    setSunMinutes(presetMinutes);
+    const next = new Date(sunDate);
+    next.setHours(Math.floor(presetMinutes / 60), presetMinutes % 60, 0, 0);
+    mapHandleRef.current?.setSunTime(next);
+  };
+
+  const getDaylightFromMinutes = (minutes: number) => {
+    if (minutes >= 5 * 60 && minutes < 11 * 60) {
+      return "morning";
+    }
+    if (minutes >= 11 * 60 && minutes < 15 * 60) {
+      return "noon";
+    }
+    if (minutes >= 15 * 60 && minutes < 19 * 60 + 30) {
+      return "evening";
+    }
+    return "night";
   };
 
   const revokeInstanceBlobUrls = (layerId?: string) => {
@@ -300,12 +263,6 @@ function App() {
   }, [layerOptions]);
 
   useEffect(() => {
-    if (currentStyle.id !== styleId) {
-      setStyleId(currentStyle.id);
-    }
-  }, [currentStyle.id, styleId]);
-
-  useEffect(() => {
     const root = document.documentElement;
     root.classList.remove("theme-light", "theme-dark");
     root.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
@@ -313,11 +270,10 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    window.localStorage.setItem("scene-editor-style-id", currentStyle.id);
     setHasSelection(false);
     setHasChanges(false);
     setSelectionElevation(null);
-  }, [currentStyle.id]);
+  }, []);
 
   useEffect(() => {
     if (!hasSelection) {
@@ -451,15 +407,16 @@ function App() {
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <div className="absolute inset-0">
-        <MapView
-          center={mapCenter}
-          zoom={16}
-          styleUrl={styleUrl}
+      <MapView
+        center={mapCenter}
+        zoom={16}
+        styleUrl={styleUrl}
           activeLayerId={activeLayerId}
           ref={mapHandleRef}
           mapControlsRef={mapControlsRef}
           showTileBoundaries={showTiles}
           weather={weather}
+          daylight={daylight}
           rainDensity={rainDensity}
           snowDensity={snowDensity}
           onSelectionChange={(selected) => {
@@ -480,6 +437,7 @@ function App() {
           date={sunDate}
           onChange={(minutes) => {
             setSunMinutes(minutes);
+            setDaylight(getDaylightFromMinutes(minutes));
             const next = new Date(sunDate);
             next.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
             mapHandleRef.current?.setSunTime(next);
@@ -669,9 +627,6 @@ function App() {
         onToggleTheme={() => {
           setTheme((current) => (current === "dark" ? "light" : "dark"));
         }}
-        styleOptions={styleOptions}
-        styleId={currentStyle.id}
-        onChangeStyle={setStyleId}
         defaultZoom={16}
         onFlyTo={(lat, lng, zoom) => {
           mapHandleRef.current?.flyToLatLng(lat, lng, zoom);
@@ -680,6 +635,8 @@ function App() {
         onToggleShadowTime={() => setShowShadowTime((prev) => !prev)}
         weather={weather}
         onChangeWeather={setWeather}
+        daylight={daylight}
+        onChangeDaylight={applyDaylight}
         rainDensity={rainDensity}
         snowDensity={snowDensity}
         onChangeRainDensity={setRainDensity}

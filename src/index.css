@@ -144,8 +144,8 @@ html, body, #root {
 }
 
 .maplibregl-ctrl-group button {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   color: var(--text);
   background: transparent;
 }
@@ -156,6 +156,9 @@ html, body, #root {
 
 .maplibregl-ctrl-group .maplibregl-ctrl-icon {
   filter: var(--map-ctrl-icon-filter);
+  width: 20px;
+  height: 20px;
+  background-size: 20px 20px;
 }
 
 .maplibregl-ctrl-group button.maplibregl-ctrl-compass .maplibregl-ctrl-icon {
